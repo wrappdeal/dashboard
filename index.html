@@ -276,11 +276,11 @@ async function pushFeed(f){
 }
 function invCard(){
   let s=null; try{ s=JSON.parse(localStorage.getItem("wd_inv_summary")||"null"); }catch(e){}
-  if(!s) return `<div class="card" style="margin-bottom:16px"><b>🧮 ইনভেন্টরি কস্টিং ও ট্যাক্স</b><div style="color:#667;font-size:13px;margin:4px 0 8px">লাভ, ভ্যাট/টার্নওভার ট্যাক্স ও আয়কর অটো-হিসাব করতে ইনভেন্টরি পেজ একবার খুলুন।</div><button class="btn" onclick="go('inventory')">ইনভেন্টরি কস্টিং খুলুন</button></div>`;
+  if(!s) return `<div class="card" style="margin-bottom:16px"><b>🧮 ইনভেন্টরি কস্টিং ও ট্যাক্স</b><div style="color:#667;font-size:13px;margin:4px 0 8px">ইনভেন্টরির লাভ ও ট্যাক্স এখানে দেখতে ইনভেন্টরি পেজ একবার খুলুন।</div><button class="btn" onclick="go('inventory')">ইনভেন্টরি কস্টিং খুলুন</button></div>`;
   const k=(l,v)=>`<div><small style="color:#667">${l}</small><div style="font-size:18px;font-weight:700">${v}</div></div>`;
   return `<div class="card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><b>🧮 ইনভেন্টরি কস্টিং ও ট্যাক্স — ${s.month}</b><button class="btn" onclick="go('inventory')">বিস্তারিত →</button></div>
    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-top:10px">
-   ${k("গ্রস প্রফিট (FIFO)",money(s.gp))}${k("নেট প্রফিট",money(s.net))}${k("ভ্যাট/টার্নওভার (মাস)",money(s.indirect))}${k("আয়কর (আনুমানিক, FY)",money(s.incomeTax))}${k("কর-পরবর্তী লাভ (FY)",money(s.afterTaxFY))}</div>
+   ${k("গ্রস প্রফিট (FIFO)",money(s.gp))}${k("নেট প্রফিট",money(s.net))}${k("ট্যাক্স প্রদান: ভ্যাট+টার্নওভার (মাস)",money(s.indirect))}${k("আয়কর (FY, আপনার দেওয়া)",money(s.incomeTax))}${k("কর-পরবর্তী লাভ (FY)",money(s.afterTaxFY))}</div>
    <div style="color:#889;font-size:11px;margin-top:8px">আনুমানিক হিসাব — চূড়ান্ত রিটার্নের আগে হিসাবরক্ষকের সাথে মিলিয়ে নিন।</div></div>`;
 }
 /* ============ GitHub sync (Contents API) ============ */

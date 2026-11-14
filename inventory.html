@@ -68,7 +68,6 @@ label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
 <script>
 //CALC-START
 const KEY='wd_inv_v1', GHKEY='wd_inv_gh', DIRTY='wd_inv_dirty';
-const DEF_SLABS=[{label:'Next slab 1',width:400000,rate:10},{label:'Next slab 2',width:500000,rate:15},{label:'Next slab 3',width:500000,rate:20},{label:'Next slab 4',width:1875000,rate:25},{label:'Next slab 5',width:26350000,rate:30},{label:'Balance',width:'',rate:35}];
 const DEF_BANDS=[
  {label:'0-30 days',from:0,cls:'Fresh stock',resp:'Normal sales monitoring.'},
  {label:'31-60 days',from:31,cls:'Regular stock',resp:'Check sales velocity against plan.'},
@@ -101,7 +100,7 @@ function nextM(m){let[y,mo]=m.split('-').map(Number);mo++;if(mo>12){mo=1;y++;}re
 function daysBetween(a,b){return Math.round((Date.parse(b)-Date.parse(a))/864e5);}
 function monLabel(m){return new Date(m+'-01T00:00:00Z').toLocaleString('en-AU',{month:'short',year:'numeric',timeZone:'UTC'});}
 function curMonth(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
-function blank(){return{v:1,settings:{month:curMonth(),capRate:12,nonMoving:365,block:181,approval:10000,maxCover:3,method:'Lot cost, FIFO',vatMode:'none',vatRate:15,turnoverRate:4,priceIncVat:'No',costIncVat:'No',claimPct:100,itMode:'individual',threshold:375000,minTax:5000,flatRate:25,projection:'Yes',aitPaid:0,autoImport:'Yes',feedStamp:'',slabs:JSON.parse(JSON.stringify(DEF_SLABS)),bands:JSON.parse(JSON.stringify(DEF_BANDS))},skus:[],lots:[],moves:[],income:[],pools:[],drivers:[],nrv:[],actions:[],checks:{},purchases:[],close:[],decisions:DECISIONS.map(x=>({decision:x[0],recommended:x[1],decided:'',date:''}))};}
+function blank(){return{v:1,settings:{month:curMonth(),capRate:12,nonMoving:365,block:181,approval:10000,maxCover:3,method:'Lot cost, FIFO',autoImport:'Yes',feedStamp:'',bands:JSON.parse(JSON.stringify(DEF_BANDS))},skus:[],lots:[],moves:[],income:[],taxes:[],pools:[],drivers:[],nrv:[],actions:[],checks:{},purchases:[],close:[],decisions:DECISIONS.map(x=>({decision:x[0],recommended:x[1],decided:'',date:''}))};}
 let S=blank();
 
 function unitCost(l){return n(l.qty)>0?n(l.price)+n(l.landed)/n(l.qty):null;}
@@ -225,29 +224,13 @@ function profit(m){
     return{rev,cogs,oth,gp,margin:rev>0?gp/rev:null,wh,idle,fin,opex,wdChg,net:gp+oth-wh-idle-fin-opex-wdChg};};
   return{month:calc([m],wdNow-wdPrev),ytd:calc(months,wdNow-wdYearStart),fy:calc(fy.list,wdNow-wdFyStart),fyInfo:fy};
 }
-function lotsBought(mm){return S.lots.filter(l=>(l.date||'').slice(0,7)===mm).reduce((s,l)=>s+n(l.qty)*n(l.price),0);}
-function slabTax(inc,thr,slabs){let left=Math.max(0,inc),tax=0,from=0;const parts=[];
-  const seg=(w,r,lab)=>{const take=w===''||w==null?left:Math.min(left,n(w));const amt=take*r/100;parts.push({lab,from,to:from+take,rate:r,take,amt});tax+=amt;left-=take;from+=take;};
-  seg(n(thr),0,'Tax-free threshold');slabs.forEach(sl=>{if(left>0)seg(sl.width,n(sl.rate),sl.label);});return{tax,parts};}
-function indirect(ms,P,st){
-  const turnover=P.rev+P.oth,r=n(st.vatRate)/100;let out=0,inn=0,tt=0,adj=0;
-  if(st.vatMode==='turnover'){tt=turnover*n(st.turnoverRate)/100;out=tt;}
-  else if(st.vatMode==='vat'){const incP=st.priceIncVat==='Yes',incC=st.costIncVat==='Yes',claim=n(st.claimPct)/100;
-    out=incP?turnover*r/(1+r):turnover*r;
-    const buy=ms.reduce((s,mm)=>s+lotsBought(mm),0);inn=(incC?buy*r/(1+r):buy*r)*claim;
-    adj=(incP?-out:0)+(incC?P.cogs*r/(1+r)*claim:0);}
-  return{turnover,out,inn,payable:out-inn,tt,adj};}
+const TAXTYPES=['Income tax','Turnover tax','VAT paid to NBR','Advance tax paid'];
+function taxSum(ms,type){return S.taxes.filter(x=>ms.includes(x.month)&&x.type===type).reduce((s,x)=>s+n(x.amount),0);}
 function taxCalc(m){
-  const st=S.settings,P=profit(m),fy=P.fyInfo,el=fy.list.length;
-  const im=indirect([m],P.month,st),iy=indirect(fy.list,P.fy,st);
-  const ptb=P.fy.net+iy.adj-iy.tt;
-  const annual=st.projection==='Yes'?ptb/el*12:ptb,base=Math.max(0,annual);
-  let annualTax=0,parts=[],minApplied=false;
-  if(st.itMode==='individual'){const r=slabTax(base,st.threshold,st.slabs);annualTax=r.tax;parts=r.parts;
-    if(base>n(st.threshold)&&annualTax<n(st.minTax)){annualTax=n(st.minTax);minApplied=true;}}
-  else if(st.itMode==='flat'){annualTax=base*n(st.flatRate)/100;}
-  const ytdTax=annualTax*(st.projection==='Yes'?el/12:1),balance=ytdTax-n(st.aitPaid);
-  return{P,fy,el,im,iy,ptb,annual,annualTax,ytdTax,balance,afterTax:ptb-ytdTax,parts,minApplied};}
+  const P=profit(m),fy=P.fyInfo,mm=[m],fm=fy.list;
+  const g=(ms)=>({inc:taxSum(ms,'Income tax'),tt:taxSum(ms,'Turnover tax'),vat:taxSum(ms,'VAT paid to NBR'),adv:taxSum(ms,'Advance tax paid')});
+  const im=g(mm),iy=g(fm);
+  return{P,fy,im,iy,indirectM:im.tt+im.vat,afterTaxM:P.month.net-im.inc-im.tt,afterTaxFY:P.fy.net-iy.inc-iy.tt};}
 function sampleData(){
   const d=blank();d.settings.month='2026-11';
   d.skus=[['CLO-SHIRT-01','Cotton shirt (assorted sizes)','Clothing','SAMPLE supplier A','pcs',20,150],['PKG-BOX-M','Corrugated mailer box - medium','Packaging','SAMPLE supplier B','pcs',500,4000],
@@ -278,7 +261,7 @@ function sampleData(){
 
 // ---------- persistence ----------
 //IO-START
-const STRK=['month','method','vatMode','priceIncVat','costIncVat','itMode','projection','autoImport','feedStamp'];
+const STRK=['month','method','autoImport','feedStamp'];
 const SCHEMA={
  skus:{file:'skus.csv',title:'Products (SKU master)',cols:[['code','SKU code','text'],['name','Product','text'],['category','Category',['Packaging','Clothing','Leather goods','Accessories','Other']],['supplier','Supplier','text'],['unit','Unit',['pcs','pack','roll','kg','carton']],['active','Active',['Yes','No']],['markPrice','Marked price (MRP)','number'],['sellPrice','Selling price','number'],['reorder','Reorder point','number'],['max','Max stock','number']]},
  lots:{file:'purchase_lots.csv',title:'Purchase lots',cols:[['ref','Lot ref','text'],['date','Receipt date','date'],['sku','SKU','text'],['qty','Qty received','number'],['price','Unit price','number'],['landed','Landed costs (lot)','number'],['preOut','Out before tracking','number'],['doc','Doc ref','text']]},
@@ -291,11 +274,11 @@ const SCHEMA={
  close:{file:'month_close.csv',title:'Month close sign-off',cols:[['month','Month','month'],['countedBy','Counted by','text'],['countDate','Count date','date'],['signedBy','Signed off by','text'],['minutes','Meeting minutes / notes','text']]},
  decisions:{file:'partner_decisions.csv',title:'Partner decisions',cols:[['decision','Decision','text'],['recommended','Recommended start','text'],['decided','WrappDeal decision','text'],['date','Date agreed','date']]},
  income:{file:'other_income.csv',title:'Other income (delivery charges)',cols:[['month','Month','month'],['type','Type','text'],['amount','Amount (BDT)','number'],['source','Source','text']]},
- slabs:{file:'tax_slabs.csv',title:'Income tax slabs',cols:[['label','Slab','text'],['width','Slab width (BDT, blank = balance)','number'],['rate','Rate %','number']]},
+ taxes:{file:'taxes.csv',title:'Tax paid (typed by you)',cols:[['month','Month','month'],['type','Tax type',['Income tax','Turnover tax','VAT paid to NBR','Advance tax paid']],['amount','Amount (BDT)','number'],['note','Note','text']]},
  bands:{file:'ageing_bands.csv',title:'Ageing bands',cols:[['label','Band label','text'],['from','From (days)','number'],['cls','Classification','text'],['resp','Suggested response','text']]}
 };
-function getArr(k){return k==='bands'||k==='slabs'?S.settings[k]:S[k];}
-function setArr(k,a){if(k==='bands'||k==='slabs')S.settings[k]=a;else S[k]=a;}
+function getArr(k){return k==='bands'?S.settings[k]:S[k];}
+function setArr(k,a){if(k==='bands')S.settings[k]=a;else S[k]=a;}
 function csvStr(rows){return rows.map(r=>r.map(c=>{c=c==null?'':String(c);return /[",\r\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',')).join('\r\n')+'\r\n';}
 function csvParse(t){const rows=[];let r=[],c='',q=false;
  for(let i=0;i<t.length;i++){const ch=t[i];
@@ -309,13 +292,13 @@ function tableToCsv(k){const sc=SCHEMA[k];return csvStr([sc.cols.map(c=>c[0])].c
 function csvToTable(k,text){const rows=csvParse(String(text).replace(/^﻿/,''));if(!rows.length)return[];const h=rows.shift();
  return rows.map(r=>{const o={};SCHEMA[k].cols.forEach(c=>{const i=h.indexOf(c[0]);o[c[0]]=i>=0&&r[i]!=null?r[i]:'';});return o;});}
 function allFiles(){const f={};Object.keys(SCHEMA).forEach(k=>f[SCHEMA[k].file]=tableToCsv(k));
- const st=S.settings;f['settings.csv']=csvStr([['key','value']].concat(Object.keys(st).filter(k=>k!=='bands'&&k!=='slabs').map(k=>[k,st[k]])));
+ const st=S.settings;f['settings.csv']=csvStr([['key','value']].concat(Object.keys(st).filter(k=>k!=='bands').map(k=>[k,st[k]])));
  const ck=[['month','step','done']];Object.keys(S.checks).forEach(m=>Object.keys(S.checks[m]).forEach(i=>{if(S.checks[m][i])ck.push([m,i,'true']);}));
  f['close_checklist.csv']=csvStr(ck);return f;}
 function fileNames(){return Object.keys(SCHEMA).map(k=>SCHEMA[k].file).concat(['settings.csv','close_checklist.csv']);}
 function applyFiles(map){const d=blank();
- Object.keys(SCHEMA).forEach(k=>{const t=map[SCHEMA[k].file];if(t!=null){const a=csvToTable(k,t);if(k==='bands'){if(a.length)d.settings.bands=a.map(b=>Object.assign(b,{from:n(b.from)}));}else if(k==='slabs'){if(a.length)d.settings.slabs=a;}else d[k]=a;}});
- if(map['settings.csv'])csvParse(map['settings.csv']).slice(1).forEach(r=>{const k=r[0],v=r[1]==null?'':r[1];if(STRK.includes(k))d.settings[k]=v;else if(k in d.settings&&k!=='bands'&&k!=='slabs')d.settings[k]=n(v);});
+ Object.keys(SCHEMA).forEach(k=>{const t=map[SCHEMA[k].file];if(t!=null){const a=csvToTable(k,t);if(k==='bands'){if(a.length)d.settings.bands=a.map(b=>Object.assign(b,{from:n(b.from)}));}else d[k]=a;}});
+ if(map['settings.csv'])csvParse(map['settings.csv']).slice(1).forEach(r=>{const k=r[0],v=r[1]==null?'':r[1];if(STRK.includes(k))d.settings[k]=v;else if(k in d.settings&&k!=='bands')d.settings[k]=n(v);});
  if(map['close_checklist.csv'])csvParse(map['close_checklist.csv']).slice(1).forEach(r=>{if(r[0]){d.checks[r[0]]=d.checks[r[0]]||{};d.checks[r[0]][r[1]]=(r[2]==='true'||r[2]==='1');}});
  return d;}
 //IO-END
@@ -420,7 +403,7 @@ function autoImport(){
   syncState=importFeed(f);save();render();
 }
 function writeSummary(){try{const m=S.settings.month,T=taxCalc(m);
-  localStorage.setItem('wd_inv_summary',JSON.stringify({month:m,gp:T.P.month.gp,net:T.P.month.net,indirect:T.im.payable,incomeTax:T.ytdTax,afterTaxFY:T.afterTax,updated:new Date().toISOString()}));}catch(e){}}
+  localStorage.setItem('wd_inv_summary',JSON.stringify({month:m,gp:T.P.month.gp,net:T.P.month.net,indirect:T.indirectM,incomeTax:T.iy.inc,afterTaxFY:T.afterTaxFY,updated:new Date().toISOString()}));}catch(e){}}
 
 // ---------- ui helpers ----------
 const inp=(a,attrs,val,type='number',cls='')=>`<input class="in ${cls}" data-a="${a}" ${Object.entries(attrs).map(([k,v])=>`data-${k}="${esc(v)}"`).join(' ')} data-id="${a}|${Object.values(attrs).map(esc).join('|')}" type="${type}" ${type==='number'?'step="any" inputmode="decimal"':''} value="${esc(val==null?'':val)}">`;
@@ -433,7 +416,7 @@ function nextLotRef(){const y=new Date().getFullYear();let k=1;while(S.lots.find
 function table(heads,rows,foot){return `<div class="tw"><table><tr>${heads.map(h=>`<th class="${Array.isArray(h)?(h[1]||''):''}">${Array.isArray(h)?h[0]:h}</th>`).join('')}</tr>${rows.join('')}${foot||''}</table></div>`;}
 
 // ---------- screens ----------
-const TABS=[['dashboard','Dashboard'],['move','Stock movements'],['cost','Costs'],['nrv','NRV review'],['setup','Products & lots'],['buy','Purchasing'],['review','Partner review'],['act','Actions'],['tax','Tax & dashboard link'],['data','Data tables (CSV)'],['set','Settings & data']];
+const TABS=[['guide','📖 গাইড (বাংলা)'],['dashboard','Dashboard'],['move','Stock movements'],['cost','Costs'],['nrv','NRV review'],['setup','Products & lots'],['buy','Purchasing'],['review','Partner review'],['act','Actions'],['tax','Tax & dashboard link'],['data','Data tables (CSV)'],['set','Settings & data']];
 function emptyMsg(){return S.lots.length?'':`<div class="msg">No stock recorded yet. Add products and lots under <b>Products &amp; lots</b>, or <b>Settings &amp; data → Load sample data</b> to see how it works.</div>`;}
 
 function vDashboard(){
@@ -636,54 +619,76 @@ function vData(){
 
 function vTax(){
   const m=S.settings.month,st=S.settings,T=taxCalc(m),fy=T.fy,feed=readFeedLocal();
-  const pc2=v=>v==null?'–':(v*100).toFixed(1)+'%';
   let h=`<div class="card"><h2>Dashboard link <span class="note">(main dashboard → this app)</span></h2>
-   <div class="note">The main dashboard publishes a plain monthly summary (products, purchases, sales by product, expenses - <b>no customer names, phones or addresses</b>). This app turns it into FIFO lots, sales movements, revenue and cost pools, then calculates profit and tax. Rows it creates are named <b>DB-…</b> / <b>OPEN-…</b> / source <b>dashboard</b> and are rebuilt on every import; anything you type yourself is never touched.</div>
+   <div class="note">The main dashboard publishes a plain monthly summary (products, purchases, sales by product, expenses - <b>no customer names, phones or addresses</b>). This app turns it into FIFO lots, sales movements, revenue and cost pools. Rows it creates are named <b>DB-…</b> / <b>OPEN-…</b> / source <b>dashboard</b> and are rebuilt on every import; anything you type yourself is never touched.</div>
    <p>${feed?`Feed on this device: <b>${(feed.products||[]).length}</b> products, <b>${(feed.sales||[]).length}</b> monthly sales lines, last updated <b>${esc(feed.updated||'-')}</b>${feed.updated===st.feedStamp?' · <span class="chip good">already imported</span>':' · <span class="chip warn">new data waiting</span>'}`:'<span class="chip warn">No feed on this device yet</span> Open the main dashboard in this browser once, or use the GitHub token.'}</p>
    <div class="frm"><div><label>Auto-import when this page opens</label>${sel('setting',{f:'autoImport'},st.autoImport,['Yes','No'])}</div></div>
    <p><button class="btn" id="impBtn">Import from dashboard now</button> <button class="btn sec" id="impRemoteBtn">Import from GitHub copy</button></p>
-   <div class="note">Dashboard expense categories map to cost pools: Rent / Utilities → P01, Salary → P02, Packaging → P04, and Courier, Ads, Transport, Other (plus per-order courier cost) → P09. Delivery charges collected become other income. Orders that are not Cancelled or Returned count as sales, the same rule the dashboard uses for stock.</div></div>`;
-  h+=`<div class="card"><h2>Tax settings <span class="note">(all rates editable)</span></h2><div class="frm">
-   <div><label>VAT / turnover tax</label>${sel('setting',{f:'vatMode'},st.vatMode,['none','turnover','vat'])}<div class="note">none = below the registration threshold · turnover = enlisted small business · vat = registered</div></div>
-   <div><label>Standard VAT rate (%)</label>${inp('setting',{f:'vatRate'},st.vatRate)}</div>
-   <div><label>Turnover tax rate (%)</label>${inp('setting',{f:'turnoverRate'},st.turnoverRate)}<div class="note">Check the current rate for your turnover band.</div></div>
-   <div><label>Selling prices include VAT?</label>${sel('setting',{f:'priceIncVat'},st.priceIncVat,['No','Yes'])}</div>
-   <div><label>Purchase prices include VAT?</label>${sel('setting',{f:'costIncVat'},st.costIncVat,['No','Yes'])}</div>
-   <div><label>Input VAT claimable (%)</label>${inp('setting',{f:'claimPct'},st.claimPct)}</div>
-   <div><label>Income tax method</label>${sel('setting',{f:'itMode'},st.itMode,['individual','flat','none'])}<div class="note">individual = sole proprietor slabs · flat = company rate</div></div>
-   <div><label>Tax-free threshold (BDT / year)</label>${inp('setting',{f:'threshold'},st.threshold)}</div>
-   <div><label>Minimum tax (BDT)</label>${inp('setting',{f:'minTax'},st.minTax)}</div>
-   <div><label>Flat company rate (%)</label>${inp('setting',{f:'flatRate'},st.flatRate)}</div>
-   <div><label>Annualise year-to-date profit?</label>${sel('setting',{f:'projection'},st.projection,['Yes','No'])}<div class="note">Yes = estimate the full-year tax from profit so far.</div></div>
-   <div><label>Advance tax already paid / deducted (BDT, this year)</label>${inp('setting',{f:'aitPaid'},st.aitPaid)}</div></div>
-   <h3>Income tax slabs (individual)</h3>${table(['Slab',['Width (BDT)','r'],['Rate %','r']],st.slabs.map((x,i)=>`<tr><td>${inp('grid',{t:'slabs',i,f:'label'},x.label,'text')}</td><td>${inp('grid',{t:'slabs',i,f:'width'},x.width)}</td><td>${inp('grid',{t:'slabs',i,f:'rate'},x.rate)}</td></tr>`))}
-   <div class="note"><b>Verify these defaults.</b> They follow the FY2026-27 budget reporting (tax-free Tk 375,000, the 5% slab removed, 30% up to Tk 3 crore and 35% above, flat minimum tax Tk 5,000), but the middle slab widths are approximated and sources differ (one reports Tk 400,000). Replace them with the table your accountant confirms. Leave the last width blank for the balance.</div></div>`;
-  const rw=(l,a,b,bold)=>`<tr${bold?' class="tot"':''}><td>${l}</td><td class="r">${f0(a)}</td><td class="r">${b===undefined?'':f0(b)}</td></tr>`;
-  h+=`<div class="card"><h2>1. VAT / turnover tax <span class="note">(${st.vatMode==='none'?'not applied - switch on above if registered':st.vatMode==='vat'?'standard VAT':'turnover tax'})</span></h2>${table(['BDT',['Month '+monLabel(m),'r'],['Year to date ('+fy.label+')','r']],[
-   rw('Taxable turnover (sales + delivery charges)',T.im.turnover,T.iy.turnover),
-   st.vatMode==='vat'?rw('Output VAT',T.im.out,T.iy.out):'',st.vatMode==='vat'?rw('Less: input VAT on purchases',T.im.inn,T.iy.inn):'',
-   st.vatMode==='turnover'?rw('Turnover tax',T.im.tt,T.iy.tt):'',
-   rw(st.vatMode==='vat'?'VAT payable to NBR':'Tax payable (VAT / turnover)',T.im.payable,T.iy.payable,1)].filter(Boolean))}
-   <div class="note">Turnover tax is treated as a deductible business cost; with VAT-inclusive prices the VAT part is removed from profit. Confirm treatment and filing dates with your accountant.</div></div>`;
-  h+=`<div class="card"><h2>2. Income tax estimate · ${fy.label} <span class="note">(July – June, ${T.el} month${T.el>1?'s':''} so far)</span></h2>${table(['BDT',['Amount','r']],[
-   `<tr><td>Net profit before tax, year to date (from the profit table)</td><td class="r">${f0(T.P.fy.net)}</td></tr>`,
-   `<tr><td>VAT / turnover tax adjustments</td><td class="r">${f0(T.iy.adj-T.iy.tt)}</td></tr>`,
-   `<tr class="tot"><td>Profit before income tax, year to date</td><td class="r">${f0(T.ptb)}</td></tr>`,
-   `<tr><td>${st.projection==='Yes'?'Annualised taxable profit (× 12 ÷ '+T.el+')':'Taxable profit used'}</td><td class="r">${f0(T.annual)}</td></tr>`].concat(
-   T.parts.filter(x=>x.take>0).map(x=>`<tr><td class="note">&nbsp;&nbsp;${esc(x.lab)} · ${f0(x.take)} at ${x.rate}%</td><td class="r note">${f0(x.amt)}</td></tr>`),
-   [`<tr><td>Full-year income tax${T.minApplied?' (minimum tax applied)':''}</td><td class="r">${f0(T.annualTax)}</td></tr>`,
-    `<tr class="tot"><td>Income tax accrued to date</td><td class="r">${f0(T.ytdTax)}</td></tr>`,
-    `<tr><td>Less: advance tax already paid / deducted</td><td class="r">${f0(n(st.aitPaid))}</td></tr>`,
-    `<tr class="tot"><td>${T.balance>=0?'Still to provide for':'Credit / refundable'}</td><td class="r">${f0(Math.abs(T.balance))}</td></tr>`,
-    `<tr class="tot"><td>Profit after income tax, year to date</td><td class="r">${f0(T.afterTax)}</td></tr>`]))}
-   <div class="note">This is a planning estimate from your recorded data, not a tax return and not tax advice. Allowable expenses, depreciation, rebates, withholding credits and your personal income all change the real figure - confirm with a qualified accountant before filing. Rates live in the settings above because Bangladesh changes them in each budget.</div></div>`;
-  if(feed){const ms=fy.list;const dRev=sum((feed.sales||[]).filter(x=>x.month===m),x=>n(x.revenue)),dCogs=sum((feed.sales||[]).filter(x=>x.month===m),x=>n(x.cogsDash));
-    h+=`<div class="card"><h2>3. Check against the main dashboard · ${monLabel(m)}</h2>${table(['BDT',['Dashboard','r'],['This app (FIFO)','r']],[
+   <div class="note">Dashboard expense categories map to cost pools: Rent / Utilities → P01, Salary → P02, Packaging → P04, and Courier, Ads, Transport, Other (plus per-order courier cost) → P09. Delivery charges collected become other income. Orders that are not Cancelled or Returned count as sales.</div></div>`;
+  const mine=S.taxes.map((x,i)=>({x,i}));
+  h+=`<div class="card"><h2>Tax paid <span class="note">(you type the amounts - nothing is calculated for you)</span></h2>
+   <div class="note">Get the amounts from your accountant or the NBR challan, then add one row for each payment. <b>Income tax</b> and <b>Turnover tax</b> are taken off profit. <b>VAT paid to NBR</b> and <b>Advance tax paid</b> are only recorded and shown, not taken off profit.</div>
+   <p><button class="btn" id="taxAdd">+ Add tax row</button></p>
+   ${mine.length?table(['Month','Tax type',['Amount (BDT)','r'],'Note',''],mine.map(({x,i})=>`<tr><td>${inp('grid',{t:'taxes',i,f:'month'},x.month,'month')}</td><td>${sel('grid',{t:'taxes',i,f:'type'},x.type,TAXTYPES)}</td><td>${inp('grid',{t:'taxes',i,f:'amount'},x.amount)}</td><td>${inp('grid',{t:'taxes',i,f:'note'},x.note,'text')}</td><td><button class="btn del" data-a="deltax" data-i="${i}">Delete</button></td></tr>`)):'<div class="note">No tax rows yet.</div>'}</div>`;
+  const rw=(l,a,b,bold)=>`<tr${bold?' class="tot"':''}><td>${l}</td><td class="r">${f0(a)}</td><td class="r">${f0(b)}</td></tr>`;
+  h+=`<div class="card"><h2>Profit after tax · ${fy.label}</h2>${table(['BDT',['Month '+monLabel(m),'r'],['Year to date (July - June)','r']],[
+   rw('Net profit before tax',T.P.month.net,T.P.fy.net),
+   rw('Less: income tax (typed)',T.im.inc,T.iy.inc),rw('Less: turnover tax (typed)',T.im.tt,T.iy.tt),
+   rw('Profit after tax',T.afterTaxM,T.afterTaxFY,1),
+   rw('VAT paid to NBR (record only)',T.im.vat,T.iy.vat),rw('Advance tax paid (record only)',T.im.adv,T.iy.adv)])}
+   <div class="note">Planning view only. The final tax figures come from your accountant.</div></div>`;
+  if(feed){const dRev=sum((feed.sales||[]).filter(x=>x.month===m),x=>n(x.revenue)),dCogs=sum((feed.sales||[]).filter(x=>x.month===m),x=>n(x.cogsDash));
+    h+=`<div class="card"><h2>Check against the main dashboard · ${monLabel(m)}</h2>${table(['BDT',['Dashboard','r'],['This app (FIFO)','r']],[
      `<tr><td>Product sales revenue</td><td class="r">${f0(dRev)}</td><td class="r">${f0(T.P.month.rev)}</td></tr>`,
      `<tr><td>Cost of goods sold</td><td class="r">${f0(dCogs)}</td><td class="r">${f0(T.P.month.cogs)}</td></tr>`,
      `<tr class="tot"><td>Gross profit</td><td class="r">${f0(dRev-dCogs)}</td><td class="r">${f0(T.P.month.gp)}</td></tr>`])}
-   <div class="note">Revenue should match. COGS can differ because the dashboard uses each product's stored cost while this app uses the actual FIFO purchase-lot cost - the gap is the costing difference you are controlling.</div></div>`;}
+   <div class="note">Revenue should match. Cost can differ because the dashboard uses each product's stored cost while this app uses the real purchase-lot (FIFO) cost.</div></div>`;}
   return h;
+}
+
+function vGuide(){
+  const sec=(ic,t,eng,what,steps,tip)=>`<div class="card"><h2>${ic} ${t} <span class="note">(${eng})</span></h2><p style="font-size:16px;line-height:1.7"><b>এটা কী?</b> ${what}</p><ol style="font-size:16px;line-height:1.9;padding-left:22px">${steps.map(x=>`<li>${x}</li>`).join('')}</ol>${tip?`<div class="msg" style="font-size:15px">💡 ${tip}</div>`:''}</div>`;
+  return `<div class="card" style="border-left:6px solid #F8BC00"><h2>📖 শুরুর আগে — এই অ্যাপ কী কাজ করে?</h2>
+   <p style="font-size:16px;line-height:1.8">আমাদের গুদামে যত মাল আছে তার <b>দাম কত</b>, কোন মাল <b>কতদিন ধরে পড়ে আছে</b>, আর মাস শেষে <b>আসলে কত লাভ হলো</b> — এই অ্যাপ সেটা হিসাব করে দেয়।</p>
+   <p style="font-size:16px;line-height:1.8"><b>সবচেয়ে সহজ নিয়ম:</b> আপনারা শুধু ঘরে (ঘর = সাদা বক্স) সংখ্যা লিখবেন। হিসাব অ্যাপ নিজে করবে। হলুদ বা ধূসর ঘরে লিখতে হয় না।</p>
+   <p style="font-size:16px;line-height:1.8"><b>মূল ড্যাশবোর্ড থেকে অটো আসে:</b> কেনা মাল, বিক্রি, খরচ ও ডেলিভারি চার্জ। তাই এগুলো আবার হাতে লিখতে হবে না।</p>
+   <p style="font-size:16px;line-height:1.8"><b>উপরে মাস বদলান:</b> স্ক্রিনের উপরের মাস-বক্স থেকে যে মাসের হিসাব দেখতে চান সেই মাস বেছে নিন।</p>
+   <p style="font-size:16px;line-height:1.8"><b>সেভ:</b> যা লিখবেন নিজে নিজে এই ফোন/কম্পিউটারে সেভ হয়। GitHub-এ পাঠাতে <b>Settings &amp; data</b> ট্যাবে “Push to GitHub” চাপুন।</p></div>
+  <div class="card"><h2>🗓️ প্রতি মাসের কাজ (এই ক্রমে করুন)</h2><ol style="font-size:16px;line-height:2;padding-left:22px">
+   <li>মূল ড্যাশবোর্ডে সব বিক্রি, ক্রয় ও খরচ ঠিকমতো লিখুন।</li>
+   <li>এই অ্যাপ খুলুন — ডেটা নিজে নিজে আসবে (না এলে <b>Tax &amp; dashboard link</b> ট্যাবে “Import from dashboard now” চাপুন)।</li>
+   <li><b>Stock movements</b>: গুদামে গুনে আসল সংখ্যা লিখুন।</li>
+   <li><b>Costs</b>: ভাড়া, বেতন ইত্যাদি লিখুন (ড্যাশবোর্ড থেকে না এলে)।</li>
+   <li><b>NRV review</b>: যে মাল সস্তায় বেচতে হবে সেগুলো দেখুন।</li>
+   <li><b>Partner review</b>: মাস শেষের সই ও মিটিং নোট লিখুন।</li>
+   <li><b>Dashboard</b>: লাভ-ক্ষতি দেখুন। শেষে Settings থেকে “Push to GitHub” চাপুন।</li></ol></div>
+  ${sec('📊','ড্যাশবোর্ড','Dashboard','এক নজরে পুরো ছবি: গুদামে মালের দাম, কত লাভ, কোন মাল পুরোনো।',
+   ['<b>Closing inventory</b> = মাস শেষে গুদামের সব মালের দাম।','<b>Profit</b> = বিক্রি থেকে খরচ বাদ দিয়ে লাভ। লাল সংখ্যা মানে ক্ষতি।','<b>Ageing mix</b> = মাল কতদিন ধরে পড়ে আছে। বেশি দিনের মাল মানে টাকা আটকে আছে।','<b>Control checks</b> = ভুল ধরার বাতি। “All passed” মানে সব ঠিক। লাল দেখালে সেটা ঠিক করুন।','<b>Month-close checklist</b> = মাস শেষের কাজের তালিকা। কাজ শেষ হলে টিক দিন।'],'এখানে কিছু লিখতে হয় না, শুধু দেখার জায়গা (শুধু checklist-এ টিক দেবেন)।')}
+  ${sec('📦','স্টক মুভমেন্ট','Stock movements','প্রতি মাসে প্রতিটি ব্যাচের মাল কতটা বিক্রি হলো, কতটা ফেরত এলো, গুদামে আসলে কতটা আছে।',
+   ['উপরে মাস ঠিক আছে কিনা দেখুন।','প্রতিটি লাইনে <b>Sales</b> (বিক্রি) লিখুন — ড্যাশবোর্ড থেকে এলে আগে থেকেই বসানো থাকবে।','<b>Returns in</b> = ক্রেতা ফেরত দিয়েছে। <b>Returns out</b> = সরবরাহকারীকে ফেরত দিয়েছি। <b>Other outflows</b> = নষ্ট বা হারিয়ে গেছে।','<b>Physical count</b> = আপনি নিজে গুনে যা পেলেন সেই সংখ্যা। এটা অবশ্যই লিখবেন।','কোনো ব্যাচে এই মাসে কিছুই হয়নি? নিচের বোতাম <b>Confirm zero activity</b> চাপুন।'],'Revenue (টাকা) ঘর খালি রাখলে অ্যাপ নিজে দাম × সংখ্যা করে নেবে।')}
+  ${sec('💸','খরচ','Costs','গুদামের মাসিক খরচ — ভাড়া, বেতন, বিদ্যুৎ ইত্যাদি। এগুলো মালের উপর ভাগ করে দেখা হয়।',
+   ['<b>১. Actual cost pools</b>: প্রতিটি খরচের পাশে ওই মাসে আসলে কত টাকা গেছে লিখুন (P01 ভাড়া, P02 বেতন, P03 বিদ্যুৎ, P04 হ্যান্ডলিং, P05 বীমা, P06 মেরামত, P09 বাকি খরচ)।','গত মাসের মতো হলে <b>Copy last month\'s amounts</b> বোতাম চাপুন।','<b>২. Cost drivers</b>: কোন ব্যাচ কতটা জায়গা নিয়েছে, কত ঘণ্টা কাজ লেগেছে — সেই সংখ্যা লিখুন। না জানলে ফাঁকা রাখুন।'],'ড্যাশবোর্ড থেকে খরচ অটো আসে। তাই আসা সংখ্যা বদলাবেন না; শুধু নতুন কিছু থাকলে যোগ করুন।')}
+  ${sec('🏷️','NRV রিভিউ','NRV review','NRV মানে “আজ বিক্রি করলে হাতে কত পাব”। যদি কেনা দামের চেয়ে কম পাই, তাহলে ক্ষতিটা এখনই হিসাবে ধরতে হয়।',
+   ['যে মাল পড়ে আছে তার জন্য <b>Selling price</b> (এখন কত দামে বিক্রি হবে) লিখুন।','<b>Cost to sell</b> = বিক্রি করতে যা খরচ (প্যাকেট, ডেলিভারি)। <b>Evidence</b> = প্রমাণ (কোথায় এই দাম দেখলেন)।','অ্যাপ নিজে বলে দেবে কত ক্ষতি ধরতে হবে (Write-down)।','ক্ষতি বেশি হলে <b>Approval</b> ঘরে অংশীদারেরা “Approved” বেছে নেবেন।'],'সব মালের জন্য লাগে না। যেগুলোর দাম কমে গেছে শুধু সেগুলো করুন।')}
+  ${sec('🧾','পণ্য ও ব্যাচ','Products & lots','এখানে পণ্যের তালিকা আর প্রতিবার কেনা মালের ব্যাচ রাখা হয়।',
+   ['<b>Add a product</b>: কোড (যেমন A1), নাম, <b>Marked price</b> (গায়ে লেখা দাম) ও <b>Selling price</b> (আসল বিক্রির দাম) লিখে Add চাপুন।','<b>Receive stock</b>: নতুন মাল এলে ব্যাচের নাম, তারিখ, পণ্য, সংখ্যা, একটার দাম, আর আনার খরচ (গাড়িভাড়া ইত্যাদি) লিখুন।','নিচের তালিকায় <b>Profit / unit</b> দেখলে বুঝবেন একটা বেচলে কত লাভ।'],'ড্যাশবোর্ডের কেনা মাল নিজে নিজে ব্যাচ হয়ে যায় (নাম DB-… বা OPEN-…)। সেগুলো হাতে বদলাবেন না — আসল জায়গা ড্যাশবোর্ড।')}
+  ${sec('🛒','ক্রয় নিয়ন্ত্রণ','Purchasing','আবার মাল কেনার আগে দেখে নেওয়া — সত্যিই কেনা দরকার কিনা।',
+   ['<b>Request a repeat purchase</b>: কোন পণ্য, কত সংখ্যা, কত দামে কিনতে চান লিখুন।','অ্যাপ দেখাবে: গুদামে এখনই কতদিনের মাল আছে, পুরোনো মাল পড়ে আছে কিনা।','লাল সতর্কতা এলে (বেশি মাল, বা পুরোনো মাল জমে আছে) কেনার আগে অংশীদারদের কাছ থেকে অনুমতি নিন।'],'নিয়ম: যে পণ্যের মাল ১৮১ দিনের বেশি পড়ে আছে, সেটা আবার কেনা বন্ধ।')}
+  ${sec('🤝','পার্টনার রিভিউ','Partner review','মাস শেষে সব অংশীদার একসাথে বসে হিসাব মিলানোর জায়গা।',
+   ['<b>Month-end stock count &amp; sign-off</b>: কে গুনলো, কবে গুনলো, কে সই করলো — লিখুন।','<b>Meeting minutes</b> ঘরে মিটিংয়ে কী ঠিক হলো সংক্ষেপে লিখুন।','<b>Decisions required</b>: বড় সিদ্ধান্ত (যেমন কোন হিসাবের নিয়ম) অংশীদাররা মিলে লিখবেন।'],'')}
+  ${sec('✅','কাজের তালিকা','Actions','কোন মাল নিয়ে কী করতে হবে তার তালিকা — কে করবে, কবে নাগাদ।',
+   ['<b>Log an action</b>: কোন মাল/ব্যাচ, কী সমস্যা, কী করবেন (ছাড়ে বিক্রি, সরবরাহকারীকে ফেরত, কম্বো অফার)।','কে করবে (Owner) আর শেষ তারিখ (Due) লিখুন।','কাজ শেষ হলে তালিকায় অবস্থা বদলে “Done” করুন।'],'শেষ তারিখ পার হলে ড্যাশবোর্ডে লাল সংখ্যা দেখাবে।')}
+  ${sec('🏛️','ট্যাক্স ও ড্যাশবোর্ড লিংক','Tax & dashboard link','এখানে মূল ড্যাশবোর্ডের সাথে সংযোগ, আর আপনাদের দেওয়া ট্যাক্সের হিসাব।',
+   ['<b>Import from dashboard now</b>: ড্যাশবোর্ডের নতুন বিক্রি, ক্রয় ও খরচ নিয়ে আসে। সাধারণত নিজেই আসে; না এলে বোতাম চাপুন।','<b>Tax paid</b>: ট্যাক্স দেওয়ার পর <b>+ Add tax row</b> চাপুন। মাস, ধরন (Income tax / Turnover tax / VAT / Advance tax) আর টাকা লিখুন।','<b>Profit after tax</b>: অ্যাপ নিজে ট্যাক্স বাদ দিয়ে লাভ দেখাবে।','<b>Check against the main dashboard</b>: দুই জায়গার বিক্রি মিলছে কিনা দেখুন। বিক্রি এক হওয়া উচিত।'],'ট্যাক্সের টাকা অ্যাপ হিসাব করে না। হিসাবরক্ষক বা NBR যা বলে সেই সংখ্যা আপনারা লিখবেন।')}
+  ${sec('🗂️','ডেটা টেবিল','Data tables (CSV)','সব তথ্য এখানে টেবিল আকারে। Excel-এর মতো সরাসরি বদলানো যায়।',
+   ['উপরের <b>Table</b> বক্স থেকে যে টেবিল দেখতে চান বেছে নিন।','<b>+ Add row</b> নতুন লাইন যোগ করে। লাইনের পাশে <b>Delete</b> মুছে দেয়।','<b>Export this CSV</b> টেবিলটা কম্পিউটারে নামায়।'],'এটা শুধু অভিজ্ঞদের জন্য। সাধারণ কাজ অন্য ট্যাবেই হয়ে যায়।')}
+  ${sec('⚙️','সেটিংস ও ডেটা','Settings & data','অ্যাপের নিয়ম ও সেভ করার জায়গা।',
+   ['<b>Policy settings</b>: কতদিন পড়ে থাকলে মাল “অচল” — এসব সংখ্যা অংশীদাররা মিলে ঠিক করবেন। না বুঝলে বদলাবেন না।','<b>GitHub sync</b>: Token বসালে Push to GitHub চাপলে সব তথ্য নিরাপদে জমা হয়। অন্য ফোনে নিতে <b>Pull from GitHub</b> চাপুন।','<b>Export backup</b>: নিজের কাছে একটা কপি রাখে।','<b>Erase everything</b> কখনো চাপবেন না — সব মুছে যায়।'],'প্রতি মাস শেষে একবার Push to GitHub চাপতে ভুলবেন না।')}
+  <div class="card"><h2>🆘 কিছু ভুল হলে</h2><ul style="font-size:16px;line-height:1.9;padding-left:22px">
+   <li>সংখ্যা মিলছে না → <b>Dashboard</b> ট্যাবের <b>Control checks</b> দেখুন; কোন লাইনে সমস্যা লেখা আছে।</li>
+   <li>ড্যাশবোর্ডের তথ্য আসেনি → মূল ড্যাশবোর্ড একবার খুলে আবার এই অ্যাপ খুলুন, তারপর Import চাপুন।</li>
+   <li>ভুল সংখ্যা লিখে ফেলেছেন → ঘরে গিয়ে আবার ঠিক সংখ্যা লিখুন; হিসাব নিজে বদলে যাবে।</li>
+   <li>তবুও বুঝতে না পারলে → কিছু মুছবেন না; অন্য অংশীদারকে জিজ্ঞেস করুন।</li></ul></div>`;
 }
 function vSet(){
   const st=S.settings;
@@ -708,7 +713,7 @@ function vSet(){
 function render(){
   $('#nav').innerHTML=TABS.map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?'on':''}">${t[1]}</button>`).join('');
   $('#mSel').value=S.settings.month;
-  const v={dashboard:vDashboard,move:vMove,cost:vCost,nrv:vNrv,setup:vSetup,buy:vBuy,review:vReview,act:vAct,tax:vTax,data:vData,set:vSet}[tab]();
+  const v={dashboard:vDashboard,move:vMove,cost:vCost,nrv:vNrv,setup:vSetup,buy:vBuy,review:vReview,act:vAct,guide:vGuide,tax:vTax,data:vData,set:vSet}[tab]();
   $('#app').innerHTML=v;setSync();writeSummary();
 }
 function softRender(){setTimeout(()=>{const a=document.activeElement,id=a&&a.dataset&&a.dataset.id;render();if(id){const el=document.querySelector(`[data-id="${CSS.escape(id)}"]`);if(el){el.focus();if(el.select&&el.type!=='date'&&el.type!=='password')try{el.select();}catch(e){}}}},120);}
@@ -743,6 +748,7 @@ document.addEventListener('click',e=>{
   if(d.a==='dellot'){const l=S.lots[+d.i];if(confirm('Delete lot '+l.ref+' and all its movements, drivers and NRV entries?')){S.moves=S.moves.filter(x=>x.lot!==l.ref);S.drivers=S.drivers.filter(x=>x.lot!==l.ref);S.nrv=S.nrv.filter(x=>x.lot!==l.ref);S.lots.splice(+d.i,1);save();render();}return;}
   if(d.a==='delpur'){if(confirm('Delete this request?')){S.purchases.splice(+d.i,1);save();render();}return;}
   if(d.a==='delact'){if(confirm('Delete this action?')){S.actions.splice(+d.i,1);save();render();}return;}
+  if(d.a==='deltax'){S.taxes.splice(+d.i,1);save();render();return;}
   if(d.a==='gdel'){if(confirm('Delete this row?')){getArr(gridTable).splice(+d.i,1);save();render();}return;}
   const id=t.id;
   if(id==='gridAdd'){const o={};SCHEMA[gridTable].cols.forEach(c=>{o[c[0]]=Array.isArray(c[2])?c[2][0]:(c[2]==='month'?S.settings.month:'');});getArr(gridTable).push(o);save();render();return;}
@@ -750,6 +756,7 @@ document.addEventListener('click',e=>{
   if(id==='zeroBtn'){const m=S.settings.month,R=report(m);R.infos.filter(i=>(i.open>0||i.received>0)&&!R.mv.find(x=>x.lot===i.ref)).forEach(i=>S.moves.push({month:m,lot:i.ref,sales:0,retIn:0,retOut:0,other:0,count:'',revenue:0}));save();render();}
   else if(id==='copyPools'){const m=S.settings.month,p=prevM(m);S.pools.filter(x=>x.month===p).forEach(x=>{if(!S.pools.find(y=>y.month===m&&y.pool===x.pool))S.pools.push(Object.assign({},x,{month:m}));});save();render();}
   else if(id==='copyDrv'){const m=S.settings.month,p=prevM(m);S.drivers.filter(x=>x.month===p).forEach(x=>{if(!S.drivers.find(y=>y.month===m&&y.lot===x.lot))S.drivers.push(Object.assign({},x,{month:m}));});save();render();}
+  else if(id==='taxAdd'){S.taxes.push({month:S.settings.month,type:'Income tax',amount:'',note:''});save();render();}
   else if(id==='impBtn')doImport(false);else if(id==='impRemoteBtn')doImport(true);
   else if(id==='pushBtn')ghPush(false);else if(id==='pullBtn'){if(confirm('Replace data on this device with the GitHub copy?'))ghPull(false);}
   else if(id==='expBtn'){const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='wrappdeal-inventory-'+new Date().toISOString().slice(0,10)+'.json';a.click();}
