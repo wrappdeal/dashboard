@@ -374,7 +374,7 @@ function vDashboard(){
   h+=`<div class="card"><h2>Profit · ${monLabel(m)} <span class="note">(management estimate, before tax)</span></h2>${table(['BDT',['This month','r'],['Year to date','r']],[
    pr('Sales revenue','rev'),pr('Less: cost of goods sold','cogs'),pr('Gross profit','gp',1),pr('Gross margin','margin'),
    pr('Less: warehouse &amp; holding costs (actual)','wh'),pr('Less: idle / abnormal cost','idle'),pr('Less: NRV write-down (reversal reduces cost)','wdChg'),
-   pr('Less: actual financing expense','fin'),pr('Less: other operating expenses (P09)','opex'),pr('Net profit before tax','net',1)].join(''))}
+   pr('Less: actual financing expense','fin'),pr('Less: other operating expenses (P09)','opex'),pr('Net profit before tax','net',1)])}
    <div class="note">Revenue is what you enter per lot on Stock movements. Marketing, courier and admin costs go on Costs as P09 - leave P09 empty if your main dashboard tracks those separately (then this is inventory-level profit). Capital blockage is not an expense and is excluded. Holding costs use the actual pool totals once, so nothing is double counted. Not tax or statutory profit.</div></div>`;
   const maxv=Math.max(1,...R.bands.map(b=>b.val));
   h+=`<div class="card"><h2>C. Ageing mix</h2>${R.bands.map((b,k)=>`<div class="bar"><div class="lab">${esc(b.b.label)}</div><div class="tr"><div class="fi ${k===R.bands.length-1?'old':''}" style="width:${b.val/maxv*100}%"></div></div><div class="val">BDT ${f0(b.val)} · ${R.closeVal?(b.val/R.closeVal*100).toFixed(0):0}%</div></div>`).join('')}
