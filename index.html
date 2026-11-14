@@ -339,9 +339,9 @@ function balances(){
 }
 
 /* ============ UI shell ============ */
-const PAGES=[["dashboard","📊","ড্যাশবোর্ড"],["sale","🛒","পণ্য বিক্রয়"],["quotes","📝","কোটেশন"],["orders","🧾","বিক্রয় তালিকা"],["mfs","📱","MFS ম্যানেজমেন্ট"],["products","📦","পণ্য ব্যবস্থাপনা"],["purchases","🛍️","ক্রয়"],["stock","🏬","স্টক"],["expenses","📉","খরচ"],["ledger","💰","ক্যাশ ও অ্যাকাউন্ট"],["reports","📌","রিপোর্ট"],["barcode","🏷️","বারকোড স্টিকার"],["settings","⚙️","সেটিংস / GitHub"]];
+const PAGES=[["dashboard","📊","ড্যাশবোর্ড"],["sale","🛒","পণ্য বিক্রয়"],["quotes","📝","কোটেশন"],["orders","🧾","বিক্রয় তালিকা"],["mfs","📱","MFS ম্যানেজমেন্ট"],["products","📦","পণ্য ব্যবস্থাপনা"],["purchases","🛍️","ক্রয়"],["stock","🏬","স্টক"],["expenses","📉","খরচ"],["ledger","💰","ক্যাশ ও অ্যাকাউন্ট"],["reports","📌","রিপোর্ট"],["inventory","🧮","ইনভেন্টরি কস্টিং"],["barcode","🏷️","বারকোড স্টিকার"],["settings","⚙️","সেটিংস / GitHub"]];
 let page=location.hash.slice(1)||"dashboard", filt={q:"",status:"",pay:"",range:30,pq:"",sq:"",lowOnly:false,mp:"",mt:"",la:""};
-function go(p){ page=p; location.hash=p; render(); window.scrollTo(0,0); }
+function go(p){ if(p==='inventory'){ location.href='inventory.html'; return; } page=p; location.hash=p; render(); window.scrollTo(0,0); }
 window.addEventListener("hashchange",()=>{ page=location.hash.slice(1)||"dashboard"; render(); });
 function render(){
   migrate();
