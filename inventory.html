@@ -353,7 +353,7 @@ async function ghPush(silent){
 // ---------- link to the main dashboard ----------
 const EXPMAP={'Rent / Utilities':'P01','Salary':'P02','Packaging materials':'P04','Courier / Delivery':'P09','Ads / Boost':'P09','Transport':'P09','Other':'P09'};
 function readFeedLocal(){try{return JSON.parse(localStorage.getItem('wd_feed_v1')||'null');}catch(e){return null;}}
-async function fetchFeedRemote(){if(!GH.token)return null;const r=await api('/contents/'+encPath(dirPath()+'dashboard_feed.json')+'?ref='+encodeURIComponent(GH.branch)+'&t='+Date.now());if(!r.ok)return null;try{return JSON.parse(b64d((await r.json()).content));}catch(e){return null;}}
+async function fetchFeedRemote(){if(!GH.token)return null;let r=null;for(const d of [...new Set([dirPath(),'inventory/'])]){r=await api('/contents/'+encPath(d+'dashboard_feed.json')+'?ref='+encodeURIComponent(GH.branch)+'&t='+Date.now());if(r.ok)break;}if(!r||!r.ok)return null;try{return JSON.parse(b64d((await r.json()).content));}catch(e){return null;}}
 function importFeed(f){
   const mine=r=>/^(DB-|OPEN-)/.test(r);
   const oldRefs=new Set(S.lots.filter(l=>mine(l.ref)).map(l=>l.ref));
@@ -394,7 +394,7 @@ function importFeed(f){
 async function doImport(remote){
   let f=remote?null:readFeedLocal();
   if(!f)f=await fetchFeedRemote();
-  if(!f){alert('No dashboard feed found. Open the main dashboard in this browser once (or sign in with the same GitHub token) so it can publish the feed.');return;}
+  if(!f){alert('No dashboard feed found yet.\n\n1) Open the main dashboard in this same browser and unlock it (reload with Ctrl+Shift+R first).\n2) Come back here and press Import again.\n\nOn another device: the main dashboard needs its GitHub token set so it can save a copy.');return;}
   const msg=importFeed(f);syncState=msg;save();render();
 }
 function autoImport(){
