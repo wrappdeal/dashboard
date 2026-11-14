@@ -204,13 +204,17 @@ function purchaseCheck(p,m){
   const moq=has(p.moq)&&n(p.qty)<n(p.moq)?'below supplier MOQ ('+f0(p.moq)+')':'';
   return{stock,old,vel,open,after,cover,reasons,moq,needs:reasons.length>0};
 }
+function moveRevenue(x){if(has(x.revenue))return n(x.revenue);const l=S.lots.find(l=>l.ref===x.lot),sk=l&&S.skus.find(s=>s.code===l.sku);return sk&&has(sk.sellPrice)?(n(x.sales)-n(x.retIn))*n(sk.sellPrice):0;}
+function skuCost(code,m){const inf=S.lots.filter(l=>l.sku===code).map(l=>lotInfo(l,m)).filter(i=>i.uc!=null);const st=inf.filter(i=>i.close>0);
+  if(st.length){const q=st.reduce((a,i)=>a+i.close,0);return st.reduce((a,i)=>a+i.close*i.uc,0)/q;}
+  const last=S.lots.filter(l=>l.sku===code&&unitCost(l)!=null).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];return last?unitCost(last):null;}
 function monthCogs(mm){return S.moves.filter(x=>x.month===mm).reduce((s,x)=>{const l=S.lots.find(l=>l.ref===x.lot),uc=l?unitCost(l):null;return s+(uc==null?0:(n(x.sales)-n(x.retIn))*uc);},0);}
 function poolSum(mm,ids){return S.pools.filter(p=>p.month===mm&&ids.includes(p.pool)).reduce((s,p)=>s+n(p.amount),0);}
 function profit(m){
   const y=m.slice(0,4),months=[];for(let k=1;k<=+m.slice(5);k++)months.push(y+'-'+String(k).padStart(2,'0'));
   const wdNow=report(m).wd,wdPrev=report(prevM(m)).wd,wdYearStart=report((+y-1)+'-12').wd;
   const calc=(ms,wdChg)=>{
-    const rev=ms.reduce((s,mm)=>s+S.moves.filter(x=>x.month===mm).reduce((a,x)=>a+n(x.revenue),0),0),cogs=ms.reduce((s,mm)=>s+monthCogs(mm),0);
+    const rev=ms.reduce((s,mm)=>s+S.moves.filter(x=>x.month===mm).reduce((a,x)=>a+moveRevenue(x),0),0),cogs=ms.reduce((s,mm)=>s+monthCogs(mm),0);
     const wh=ms.reduce((s,mm)=>s+poolSum(mm,['P01','P02','P03','P04','P05','P06']),0),idle=ms.reduce((s,mm)=>s+poolSum(mm,['P07']),0),
       fin=ms.reduce((s,mm)=>s+poolSum(mm,['P08']),0),opex=ms.reduce((s,mm)=>s+poolSum(mm,['P09']),0),gp=rev-cogs;
     return{rev,cogs,gp,margin:rev>0?gp/rev:null,wh,idle,fin,opex,wdChg,net:gp-wh-idle-fin-opex-wdChg};};
@@ -222,6 +226,7 @@ function sampleData(){
    ['PKG-BOX-L','Corrugated mailer box - large','Packaging','SAMPLE supplier B','pcs',300,2000],['PKG-POLY-S','Poly mailer - small','Packaging','SAMPLE supplier C','pcs',2000,12000],
    ['LTH-WALLET-01',"Leather wallet - men's",'Leather goods','SAMPLE supplier D','pcs',20,100],['ACC-BELT-01','Leather belt','Accessories','SAMPLE supplier D','pcs',30,150]]
    .map(a=>({code:a[0],name:a[1],category:a[2],supplier:a[3],unit:a[4],active:'Yes',reorder:a[5],max:a[6]}));
+  {const PX={'CLO-SHIRT-01':[750,600],'PKG-BOX-M':[35,28],'PKG-BOX-L':[45,38],'PKG-POLY-S':[6,4.5],'LTH-WALLET-01':[1400,1100],'ACC-BELT-01':[800,650]};d.skus.forEach(s=>{s.markPrice=PX[s.code][0];s.sellPrice=PX[s.code][1];});}
   d.lots=[['L-2025-10-01','2025-10-15','CLO-SHIRT-01',120,480,0,0,'SAMPLE INV-0001'],['L-2026-03-01','2026-03-10','PKG-BOX-M',2000,18,6000,1200,'SAMPLE INV-0102'],
    ['L-2026-06-01','2026-06-05','LTH-WALLET-01',150,650,3000,20,'SAMPLE INV-0155'],['L-2026-08-01','2026-08-20','PKG-BOX-M',3000,17.5,7500,900,'SAMPLE INV-0190'],
    ['L-2026-09-01','2026-09-12','ACC-BELT-01',200,320,2000,30,'SAMPLE INV-0204'],['L-2026-10-01','2026-10-05','PKG-POLY-S',10000,2.4,4000,0,'SAMPLE INV-0231']]
@@ -246,7 +251,7 @@ function sampleData(){
 // ---------- persistence ----------
 //IO-START
 const SCHEMA={
- skus:{file:'skus.csv',title:'Products (SKU master)',cols:[['code','SKU code','text'],['name','Product','text'],['category','Category',['Packaging','Clothing','Leather goods','Accessories','Other']],['supplier','Supplier','text'],['unit','Unit',['pcs','pack','roll','kg','carton']],['active','Active',['Yes','No']],['reorder','Reorder point','number'],['max','Max stock','number']]},
+ skus:{file:'skus.csv',title:'Products (SKU master)',cols:[['code','SKU code','text'],['name','Product','text'],['category','Category',['Packaging','Clothing','Leather goods','Accessories','Other']],['supplier','Supplier','text'],['unit','Unit',['pcs','pack','roll','kg','carton']],['active','Active',['Yes','No']],['markPrice','Marked price (MRP)','number'],['sellPrice','Selling price','number'],['reorder','Reorder point','number'],['max','Max stock','number']]},
  lots:{file:'purchase_lots.csv',title:'Purchase lots',cols:[['ref','Lot ref','text'],['date','Receipt date','date'],['sku','SKU','text'],['qty','Qty received','number'],['price','Unit price','number'],['landed','Landed costs (lot)','number'],['preOut','Out before tracking','number'],['doc','Doc ref','text']]},
  moves:{file:'movements.csv',title:'Monthly movements',cols:[['month','Month','month'],['lot','Lot ref','text'],['sales','Sales','number'],['retIn','Returns in','number'],['retOut','Returns out','number'],['other','Other outflows','number'],['count','Physical count','number'],['revenue','Revenue (BDT)','number']]},
  pools:{file:'cost_pools.csv',title:'Cost pools',cols:[['month','Month','month'],['pool','Pool ID',['P01','P02','P03','P04','P05','P06','P07','P08','P09']],['amount','Amount (BDT)','number'],['source','Source ref','text']]},
@@ -375,7 +380,7 @@ function vDashboard(){
    pr('Sales revenue','rev'),pr('Less: cost of goods sold','cogs'),pr('Gross profit','gp',1),pr('Gross margin','margin'),
    pr('Less: warehouse &amp; holding costs (actual)','wh'),pr('Less: idle / abnormal cost','idle'),pr('Less: NRV write-down (reversal reduces cost)','wdChg'),
    pr('Less: actual financing expense','fin'),pr('Less: other operating expenses (P09)','opex'),pr('Net profit before tax','net',1)])}
-   <div class="note">Revenue is what you enter per lot on Stock movements. Marketing, courier and admin costs go on Costs as P09 - leave P09 empty if your main dashboard tracks those separately (then this is inventory-level profit). Capital blockage is not an expense and is excluded. Holding costs use the actual pool totals once, so nothing is double counted. Not tax or statutory profit.</div></div>`;
+   <div class="note">Revenue = units sold × the selling price you set on each product (Products &amp; lots), or the amount you type on Stock movements. Marketing, courier and admin costs go on Costs as P09 - leave P09 empty if your main dashboard tracks those separately (then this is inventory-level profit). Capital blockage is not an expense and is excluded. Holding costs use the actual pool totals once, so nothing is double counted. Not tax or statutory profit.</div></div>`;
   const maxv=Math.max(1,...R.bands.map(b=>b.val));
   h+=`<div class="card"><h2>C. Ageing mix</h2>${R.bands.map((b,k)=>`<div class="bar"><div class="lab">${esc(b.b.label)}</div><div class="tr"><div class="fi ${k===R.bands.length-1?'old':''}" style="width:${b.val/maxv*100}%"></div></div><div class="val">BDT ${f0(b.val)} · ${R.closeVal?(b.val/R.closeVal*100).toFixed(0):0}%</div></div>`).join('')}
    <div class="note">${R.bands.filter(b=>b.units>0).map(b=>`<b>${esc(b.b.label)}</b>: ${esc(b.b.resp)}`).join('<br>')}</div></div>`;
@@ -398,14 +403,14 @@ function vMove(){
   const m=S.settings.month,R=report(m);
   const rows=R.infos.filter(i=>i.open>0||i.received>0||i.close!==0||R.mv.find(x=>x.lot===i.ref));
   let h=emptyMsg();
-  h+=`<div class="card"><h2>Stock movements · ${monLabel(m)}</h2><div class="note">One row per lot in stock. Enter units for the month (leave 0 if none), the signed physical count, and sales revenue. Opening, receipts and closing are calculated. Press “Confirm zero activity” for lots with nothing to report so the check clears.</div>
+  h+=`<div class="card"><h2>Stock movements · ${monLabel(m)}</h2><div class="note">One row per lot in stock. Enter units for the month (leave 0 if none) and the physical count. Revenue is calculated from units sold × the product's selling price (set under Products &amp; lots); type a Revenue amount only to override it. Opening, receipts and closing are calculated. Press “Confirm zero activity” for lots with nothing to report so the check clears.</div>
    ${rows.length?table(['Lot','SKU',['Opening','r'],['Receipts','r'],['Sales','r'],['Returns in','r'],['Returns out','r'],['Other out','r'],['Closing','r'],['Physical count','r'],['Variance','r'],['Revenue (BDT)','r'],'Entered?'],
     rows.map(i=>{const x=R.mv.find(x=>x.lot===i.ref)||{};const v=has(x.count)?n(x.count)-i.close:null;const k={lot:i.ref};
      return `<tr><td>${esc(i.ref)}</td><td>${esc(i.sku)}</td><td class="r">${f0(i.open)}</td><td class="r">${f0(i.received)}</td>
       <td>${inp('mv',{lot:i.ref,f:'sales'},x.sales)}</td><td>${inp('mv',{lot:i.ref,f:'retIn'},x.retIn)}</td><td>${inp('mv',{lot:i.ref,f:'retOut'},x.retOut)}</td><td>${inp('mv',{lot:i.ref,f:'other'},x.other)}</td>
       <td class="r"><b>${f0(i.close)}</b>${i.close<0?' '+chip('NEGATIVE','bad'):''}</td><td>${inp('mv',{lot:i.ref,f:'count'},x.count)}</td>
-      <td class="r">${v==null?'–':(v===0?chip('0','ok'):chip(v,'bad'))}</td><td>${inp('mv',{lot:i.ref,f:'revenue'},x.revenue)}</td><td>${R.mv.find(y=>y.lot===i.ref)?chip('Yes','ok'):chip('No','warn')}</td></tr>`;}),
-    `<tr class="tot"><td colspan="2">Total</td><td class="r">${f0(sum(rows,i=>i.open))}</td><td class="r">${f0(sum(rows,i=>i.received))}</td><td class="r">${f0(sum(R.mv,x=>n(x.sales)))}</td><td class="r">${f0(sum(R.mv,x=>n(x.retIn)))}</td><td class="r">${f0(sum(R.mv,x=>n(x.retOut)))}</td><td class="r">${f0(sum(R.mv,x=>n(x.other)))}</td><td class="r">${f0(sum(rows,i=>i.close))}</td><td></td><td></td><td class="r">${f0(sum(R.mv,x=>n(x.revenue)))}</td><td></td></tr>`):'<div class="note">No lots in stock for this month.</div>'}
+      <td class="r">${v==null?'–':(v===0?chip('0','ok'):chip(v,'bad'))}</td><td>${inp('mv',{lot:i.ref,f:'revenue'},x.revenue)}${!has(x.revenue)&&moveRevenue(x)>0?'<div class="note">auto '+f0(moveRevenue(x))+'</div>':''}</td><td>${R.mv.find(y=>y.lot===i.ref)?chip('Yes','ok'):chip('No','warn')}</td></tr>`;}),
+    `<tr class="tot"><td colspan="2">Total</td><td class="r">${f0(sum(rows,i=>i.open))}</td><td class="r">${f0(sum(rows,i=>i.received))}</td><td class="r">${f0(sum(R.mv,x=>n(x.sales)))}</td><td class="r">${f0(sum(R.mv,x=>n(x.retIn)))}</td><td class="r">${f0(sum(R.mv,x=>n(x.retOut)))}</td><td class="r">${f0(sum(R.mv,x=>n(x.other)))}</td><td class="r">${f0(sum(rows,i=>i.close))}</td><td></td><td></td><td class="r">${f0(sum(R.mv,x=>moveRevenue(x)))}</td><td></td></tr>`):'<div class="note">No lots in stock for this month.</div>'}
    <p><button class="btn gold" id="zeroBtn">Confirm zero activity for untouched lots</button></p></div>`;
   return h;
 }
@@ -437,7 +442,7 @@ function vNrv(){
     rows.map(i=>{const c=R.nrv[i.ref],e=c.e||{};const p=S.skus.find(s=>s.code===i.sku);
      return `<tr><td>${esc(i.ref)}</td><td>${esc(p?p.name:i.sku)}</td><td class="r">${f0(i.close)}</td><td class="r">${f2(i.uc)}</td><td class="r">${i.age}</td>
       <td>${chip(c.trig,c.trig==='MANDATORY'?'bad':c.trig==='Recommended'?'warn':'ok')}</td>
-      <td>${inp('nrv',{lot:i.ref,f:'price'},e.price)}</td><td>${inp('nrv',{lot:i.ref,f:'costSell'},e.costSell)}</td><td>${inp('nrv',{lot:i.ref,f:'completion'},e.completion)}</td>
+      <td>${inp('nrv',{lot:i.ref,f:'price'},e.price)}${p&&has(p.sellPrice)?'<div class="note">list price '+f0(p.sellPrice)+'</div>':''}</td><td>${inp('nrv',{lot:i.ref,f:'costSell'},e.costSell)}</td><td>${inp('nrv',{lot:i.ref,f:'completion'},e.completion)}</td>
       <td>${inp('nrv',{lot:i.ref,f:'evidence'},e.evidence,'text','w')}${c.needEv?' '+chip('EVIDENCE NEEDED','bad'):''}${c.carried?'<div class="note">from '+monLabel(e.month)+'</div>':''}</td>
       <td class="r">${f2(c.nrv)}</td><td class="r"><b>${f0(c.wd)}</b></td><td>${c.route?chip(c.route,c.route==='Partner approval'?'warn':'ok'):''}</td>
       <td>${sel('nrv',{lot:i.ref,f:'status'},e.status||'Pending',['Pending','Approved','Rejected','Not required'])}</td><td>${inp('nrv',{lot:i.ref,f:'approver'},e.approver,'text')}</td></tr>`;}),
@@ -451,10 +456,11 @@ function vSetup(){
   let h=`<div class="card"><h2>Add a product (SKU)</h2><form class="frm" data-form="sku">
    <div><label>SKU code *</label><input name="code" required placeholder="e.g. PKG-BOX-S"></div><div><label>Product name *</label><input name="name" required></div>
    <div><label>Category</label><select name="category">${cats.map(c=>`<option>${c}</option>`).join('')}</select></div><div><label>Supplier</label><input name="supplier"></div>
+   <div><label>Marked price / MRP (BDT)</label><input name="markPrice" type="number" step="any"></div><div><label>Selling price (BDT)</label><input name="sellPrice" type="number" step="any"></div>
    <div><label>Unit</label><select name="unit">${units.map(c=>`<option>${c}</option>`).join('')}</select></div>
    <div><label>Reorder point (units)</label><input name="reorder" type="number" step="any"></div><div><label>Max stock (units)</label><input name="max" type="number" step="any"></div>
    <div><button class="btn" type="submit">Add product</button></div></form></div>`;
-  h+=`<div class="card"><h2>Products</h2>${S.skus.length?table(['SKU','Product','Category','Supplier','Unit','Active',['Reorder','r'],['Max','r'],''],S.skus.map((s,i)=>`<tr><td>${esc(s.code)}</td><td>${inp('sku',{i,f:'name'},s.name,'text','w')}</td><td>${sel('sku',{i,f:'category'},s.category,cats)}</td><td>${inp('sku',{i,f:'supplier'},s.supplier,'text')}</td><td>${sel('sku',{i,f:'unit'},s.unit,units)}</td><td>${sel('sku',{i,f:'active'},s.active,['Yes','No'])}</td><td>${inp('sku',{i,f:'reorder'},s.reorder)}</td><td>${inp('sku',{i,f:'max'},s.max)}</td><td><button class="btn del" data-a="delsku" data-i="${i}">Delete</button></td></tr>`)):'<div class="note">No products yet.</div>'}</div>`;
+  h+=`<div class="card"><h2>Products</h2>${S.skus.length?table(['SKU','Product','Category','Supplier','Unit','Active',['Marked price','r'],['Selling price','r'],['Avg unit cost','r'],['Profit / unit','r'],['Margin','r'],['Reorder','r'],['Max','r'],''],S.skus.map((s,i)=>{const uc=skuCost(s.code,S.settings.month),up=has(s.sellPrice)&&uc!=null?n(s.sellPrice)-uc:null;return `<tr><td>${esc(s.code)}</td><td>${inp('sku',{i,f:'name'},s.name,'text','w')}</td><td>${sel('sku',{i,f:'category'},s.category,cats)}</td><td>${inp('sku',{i,f:'supplier'},s.supplier,'text')}</td><td>${sel('sku',{i,f:'unit'},s.unit,units)}</td><td>${sel('sku',{i,f:'active'},s.active,['Yes','No'])}</td><td>${inp('sku',{i,f:'markPrice'},s.markPrice)}</td><td>${inp('sku',{i,f:'sellPrice'},s.sellPrice)}</td><td class="r">${f2(uc)}</td><td class="r">${up==null?'–':(up<0?chip(f2(up),'bad'):f2(up))}</td><td class="r">${up==null||!n(s.sellPrice)?'–':pc(up/n(s.sellPrice))}</td><td>${inp('sku',{i,f:'reorder'},s.reorder)}</td><td>${inp('sku',{i,f:'max'},s.max)}</td><td><button class="btn del" data-a="delsku" data-i="${i}">Delete</button></td></tr>`;})):'<div class="note">No products yet.</div>'}</div>`;
   h+=`<div class="card"><h2>Receive stock - add a purchase lot</h2><form class="frm" data-form="lot" id="lotForm">
    <div><label>Lot ref * (unique)</label><input name="ref" required value="${nextLotRef()}"></div>
    <div><label>SKU *</label><select name="sku" required>${S.skus.map(s=>`<option value="${esc(s.code)}">${esc(s.code)} - ${esc(s.name)}</option>`).join('')}</select></div>
@@ -613,7 +619,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('submit',e=>{
   const f=e.target,k=f.dataset.form;if(!k)return;e.preventDefault();const o=Object.fromEntries(new FormData(f));
-  if(k==='sku'){o.code=o.code.trim();if(S.skus.find(s=>s.code===o.code)){alert('SKU code already exists.');return;}S.skus.push({code:o.code,name:o.name.trim(),category:o.category,supplier:o.supplier,unit:o.unit,active:'Yes',reorder:o.reorder,max:o.max});}
+  if(k==='sku'){o.code=o.code.trim();if(S.skus.find(s=>s.code===o.code)){alert('SKU code already exists.');return;}S.skus.push({code:o.code,name:o.name.trim(),category:o.category,supplier:o.supplier,unit:o.unit,active:'Yes',reorder:o.reorder,max:o.max,markPrice:o.markPrice,sellPrice:o.sellPrice});}
   else if(k==='lot'){o.ref=o.ref.trim();if(S.lots.find(l=>l.ref===o.ref)){alert('Lot ref already exists.');return;}if(!S.skus.length){alert('Add a product first.');return;}
     S.lots.push({ref:o.ref,date:o.date,sku:o.sku,qty:n(o.qty),price:n(o.price),landed:n(o.landed),preOut:n(o.preOut),doc:o.doc});}
   else if(k==='pur'){const id='PR-'+String(S.purchases.length+1).padStart(3,'0');S.purchases.push({id,date:new Date().toISOString().slice(0,10),sku:o.sku,qty:n(o.qty),price:o.price,lead:o.lead,moq:o.moq,reason:o.reason,status:'Requested',approver:''});}
