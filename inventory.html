@@ -82,7 +82,8 @@ const POOLS=[
  {id:'P05',name:'Insurance',driver:'Insured inventory value (automatic)',alloc:true},
  {id:'P06',name:'Maintenance',driver:'Occupied area (m2)',alloc:true},
  {id:'P07',name:'Abnormal / idle capacity',driver:'Not allocated - shown separately',alloc:false},
- {id:'P08',name:'Actual financing expense',driver:'Not allocated - own line (real borrowing cost)',alloc:false}];
+ {id:'P08',name:'Actual financing expense',driver:'Not allocated - own line (real borrowing cost)',alloc:false},
+ {id:'P09',name:'Other operating expenses (marketing, courier, admin)',driver:'Not allocated - own line',alloc:false}];
 const STEPS=['Close stock movements (every lot, with physical count)','Confirm landed cost on new lots','Check ageing for the reporting month','Record actual cost pools','Fill cost drivers and reconcile','Review NRV evidence for aged lots','Partners review dashboard, log actions'];
 const ACTIONS=['Clearance sale','Return to supplier','Bundle / combo offer','Channel transfer','Restrict reorder','Price review','Other'];
 const DECISIONS=[['Inventory costing method','Confirm FIFO or weighted average with the accountant; apply consistently.'],['Ageing basis','Receipt / lot date; keep lot-level ageing for mixed receipts.'],['Ageing thresholds','Adopt the bands initially; revise to the real sales cycle.'],['Cost allocation drivers','Approve a driver per pool and document the reason.'],['Capital cost rate','Actual financing data where relevant; approve any management-only opportunity rate separately.'],['NRV approval authority','Set the BDT threshold for finance review vs partner approval.'],['Non-moving action trigger','Define when reorders are blocked and a clearance plan is mandatory.'],['Monthly close date','Fixed month-end cut-off and a fixed reporting deadline.']];
@@ -203,6 +204,18 @@ function purchaseCheck(p,m){
   const moq=has(p.moq)&&n(p.qty)<n(p.moq)?'below supplier MOQ ('+f0(p.moq)+')':'';
   return{stock,old,vel,open,after,cover,reasons,moq,needs:reasons.length>0};
 }
+function monthCogs(mm){return S.moves.filter(x=>x.month===mm).reduce((s,x)=>{const l=S.lots.find(l=>l.ref===x.lot),uc=l?unitCost(l):null;return s+(uc==null?0:(n(x.sales)-n(x.retIn))*uc);},0);}
+function poolSum(mm,ids){return S.pools.filter(p=>p.month===mm&&ids.includes(p.pool)).reduce((s,p)=>s+n(p.amount),0);}
+function profit(m){
+  const y=m.slice(0,4),months=[];for(let k=1;k<=+m.slice(5);k++)months.push(y+'-'+String(k).padStart(2,'0'));
+  const wdNow=report(m).wd,wdPrev=report(prevM(m)).wd,wdYearStart=report((+y-1)+'-12').wd;
+  const calc=(ms,wdChg)=>{
+    const rev=ms.reduce((s,mm)=>s+S.moves.filter(x=>x.month===mm).reduce((a,x)=>a+n(x.revenue),0),0),cogs=ms.reduce((s,mm)=>s+monthCogs(mm),0);
+    const wh=ms.reduce((s,mm)=>s+poolSum(mm,['P01','P02','P03','P04','P05','P06']),0),idle=ms.reduce((s,mm)=>s+poolSum(mm,['P07']),0),
+      fin=ms.reduce((s,mm)=>s+poolSum(mm,['P08']),0),opex=ms.reduce((s,mm)=>s+poolSum(mm,['P09']),0),gp=rev-cogs;
+    return{rev,cogs,gp,margin:rev>0?gp/rev:null,wh,idle,fin,opex,wdChg,net:gp-wh-idle-fin-opex-wdChg};};
+  return{month:calc([m],wdNow-wdPrev),ytd:calc(months,wdNow-wdYearStart)};
+}
 function sampleData(){
   const d=blank();d.settings.month='2026-11';
   d.skus=[['CLO-SHIRT-01','Cotton shirt (assorted sizes)','Clothing','SAMPLE supplier A','pcs',20,150],['PKG-BOX-M','Corrugated mailer box - medium','Packaging','SAMPLE supplier B','pcs',500,4000],
@@ -236,7 +249,7 @@ const SCHEMA={
  skus:{file:'skus.csv',title:'Products (SKU master)',cols:[['code','SKU code','text'],['name','Product','text'],['category','Category',['Packaging','Clothing','Leather goods','Accessories','Other']],['supplier','Supplier','text'],['unit','Unit',['pcs','pack','roll','kg','carton']],['active','Active',['Yes','No']],['reorder','Reorder point','number'],['max','Max stock','number']]},
  lots:{file:'purchase_lots.csv',title:'Purchase lots',cols:[['ref','Lot ref','text'],['date','Receipt date','date'],['sku','SKU','text'],['qty','Qty received','number'],['price','Unit price','number'],['landed','Landed costs (lot)','number'],['preOut','Out before tracking','number'],['doc','Doc ref','text']]},
  moves:{file:'movements.csv',title:'Monthly movements',cols:[['month','Month','month'],['lot','Lot ref','text'],['sales','Sales','number'],['retIn','Returns in','number'],['retOut','Returns out','number'],['other','Other outflows','number'],['count','Physical count','number'],['revenue','Revenue (BDT)','number']]},
- pools:{file:'cost_pools.csv',title:'Cost pools',cols:[['month','Month','month'],['pool','Pool ID',['P01','P02','P03','P04','P05','P06','P07','P08']],['amount','Amount (BDT)','number'],['source','Source ref','text']]},
+ pools:{file:'cost_pools.csv',title:'Cost pools',cols:[['month','Month','month'],['pool','Pool ID',['P01','P02','P03','P04','P05','P06','P07','P08','P09']],['amount','Amount (BDT)','number'],['source','Source ref','text']]},
  drivers:{file:'cost_drivers.csv',title:'Cost drivers',cols:[['month','Month','month'],['lot','Lot ref','text'],['space','Space-days','number'],['hours','Staff hours','number'],['area','Area m2','number'],['handled','Handled units','number']]},
  nrv:{file:'nrv_reviews.csv',title:'NRV reviews',cols:[['month','Month','month'],['lot','Lot ref','text'],['price','Selling price','number'],['costSell','Cost to sell','number'],['completion','Completion cost','number'],['evidence','Evidence','text'],['status','Approval',['Pending','Approved','Rejected','Not required']],['approver','Approver','text']]},
  actions:{file:'actions.csv',title:'Actions',cols:[['id','ID','text'],['raised','Raised','date'],['target','Lot / SKU','text'],['issue','Issue','text'],['action','Action',['Clearance sale','Return to supplier','Bundle / combo offer','Channel transfer','Restrict reorder','Price review','Other']],['owner','Owner','text'],['due','Due','date'],['status','Status',['Open','In progress','Done','Cancelled']],['cleared','Cost cleared','number'],['expected','Expected recovery','number'],['proceeds','Net proceeds','number']]},
@@ -357,6 +370,12 @@ function vDashboard(){
    ${kpi('Clearance recovery',R.cleared?pc(R.proceeds/R.cleared):'n/a','Net cash ÷ cost of stock cleared')}
    ${kpi('Open / overdue actions',R.open+' / '+R.overdue,'See Actions',R.overdue?'bad':'')}
   </div></div>`;
+  const PR=profit(m),pr=(l,k,b)=>`<tr${b?' class="tot"':''}><td>${l}</td><td class="r">${k==='margin'?pc(PR.month.margin):f0(PR.month[k])}</td><td class="r">${k==='margin'?pc(PR.ytd.margin):f0(PR.ytd[k])}</td></tr>`;
+  h+=`<div class="card"><h2>Profit · ${monLabel(m)} <span class="note">(management estimate, before tax)</span></h2>${table(['BDT',['This month','r'],['Year to date','r']],[
+   pr('Sales revenue','rev'),pr('Less: cost of goods sold','cogs'),pr('Gross profit','gp',1),pr('Gross margin','margin'),
+   pr('Less: warehouse &amp; holding costs (actual)','wh'),pr('Less: idle / abnormal cost','idle'),pr('Less: NRV write-down (reversal reduces cost)','wdChg'),
+   pr('Less: actual financing expense','fin'),pr('Less: other operating expenses (P09)','opex'),pr('Net profit before tax','net',1)].join(''))}
+   <div class="note">Revenue is what you enter per lot on Stock movements. Marketing, courier and admin costs go on Costs as P09 - leave P09 empty if your main dashboard tracks those separately (then this is inventory-level profit). Capital blockage is not an expense and is excluded. Holding costs use the actual pool totals once, so nothing is double counted. Not tax or statutory profit.</div></div>`;
   const maxv=Math.max(1,...R.bands.map(b=>b.val));
   h+=`<div class="card"><h2>C. Ageing mix</h2>${R.bands.map((b,k)=>`<div class="bar"><div class="lab">${esc(b.b.label)}</div><div class="tr"><div class="fi ${k===R.bands.length-1?'old':''}" style="width:${b.val/maxv*100}%"></div></div><div class="val">BDT ${f0(b.val)} · ${R.closeVal?(b.val/R.closeVal*100).toFixed(0):0}%</div></div>`).join('')}
    <div class="note">${R.bands.filter(b=>b.units>0).map(b=>`<b>${esc(b.b.label)}</b>: ${esc(b.b.resp)}`).join('<br>')}</div></div>`;
