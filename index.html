@@ -173,7 +173,7 @@ async function deriveKey(pw,saltB64){
 }
 async function encStr(str,k=KEY){ const iv=crypto.getRandomValues(new Uint8Array(12)); const ct=await crypto.subtle.encrypt({name:"AES-GCM",iv},k,new TextEncoder().encode(str)); return {iv:toB64(iv),ct:toB64(new Uint8Array(ct))}; }
 async function decStr(o,k=KEY){ const pt=await crypto.subtle.decrypt({name:"AES-GCM",iv:fromB64(o.iv)},k,fromB64(o.ct)); return new TextDecoder().decode(pt); }
-async function persist(){ if(KEY){ const o=await encStr(JSON.stringify(S)); localStorage.setItem("wd_data",JSON.stringify({enc:1,...o})); } else localStorage.setItem("wd_data",JSON.stringify(S)); }
+async function persist(){ writeFeed(); if(KEY){ const o=await encStr(JSON.stringify(S)); localStorage.setItem("wd_data",JSON.stringify({enc:1,...o})); } else localStorage.setItem("wd_data",JSON.stringify(S)); }
 async function persistGH(){ const g={...GH}; if(KEY&&g.token){ g.tokenEnc=await encStr(g.token); delete g.token; } localStorage.setItem("wd_gh",JSON.stringify(g)); }
 async function packData(){ if(!KEY) return JSON.stringify(S,null,1); const o=await encStr(JSON.stringify(S)); return JSON.stringify({enc:1,v:2,salt:SEC.salt,...o}); }
 async function adoptKey(k,salt){ KEY=k; SEC={salt,verifier:await encStr("wrappdeal-ok")}; localStorage.setItem("wd_sec",JSON.stringify(SEC)); await persistGH(); await persist(); $("#lockbtn").style.display="inline-block"; resetIdle(); }
@@ -230,6 +230,58 @@ function save(){
   persist();
   META.dirty=true; localStorage.setItem("wd_meta",JSON.stringify(META));
   scheduleSync(); render();
+}
+
+/* ============ Link to Inventory Costing (same-origin feed, no customer data) ============ */
+function buildFeed(){
+  const code=pid=>{const p=S.products.find(p=>p.id===pid);return p?p.code:null;};
+  const sales={},mon={},exp={};let unmapped=0;
+  const mm=d=>String(d||"").slice(0,7);
+  S.orders.filter(counts).forEach(o=>{
+    const m=mm(o.date); if(!m) return;
+    const itT=orderItemsTotal(o)||1, disc=num(o.discount);
+    o.items.forEach(i=>{
+      const c=code(i.pid); if(!c){unmapped++;return;}
+      const k=m+"|"+c, line=num(i.qty)*num(i.price), rev=line-disc*line/itT;
+      const r=sales[k]||(sales[k]={month:m,code:c,qty:0,revenue:0,cogsDash:0});
+      r.qty+=num(i.qty); r.revenue+=rev; r.cogsDash+=num(i.qty)*num(i.cost);
+    });
+    const x=mon[m]||(mon[m]={month:m,delivery:0,courier:0,orders:0});
+    x.delivery+=num(o.delivery); x.courier+=num(o.courierCost); x.orders++;
+  });
+  S.expenses.forEach(e=>{ const m=mm(e.date); if(!m) return; const k=m+"|"+e.category; const r=exp[k]||(exp[k]={month:m,cat:e.category,amount:0}); r.amount+=num(e.amount); });
+  const r2=x=>Math.round(x*100)/100;
+  return {v:1,updated:S.updated||null,unmapped,
+    products:S.products.map(p=>({code:p.code,name:p.name,category:p.category||"",cost:num(p.cost),price:num(p.price),stock:num(p.stock)})),
+    purchases:S.purchases.map(u=>({date:u.date,code:code(u.pid)||"",name:u.name||"",qty:num(u.qty),cost:num(u.cost)})),
+    sales:Object.values(sales).map(r=>({...r,revenue:r2(r.revenue),cogsDash:r2(r.cogsDash)})),
+    monthly:Object.values(mon), expenses:Object.values(exp).map(r=>({...r,amount:r2(r.amount)}))};
+}
+let feedPushTimer=null;
+function writeFeed(){
+  try{ if(!S.products.length&&!S.orders.length) return; const f=buildFeed(); localStorage.setItem("wd_feed_v1",JSON.stringify(f));
+    if(typeof ghReady==="function"&&ghReady()){ clearTimeout(feedPushTimer); feedPushTimer=setTimeout(()=>pushFeed(f),4000); } }catch(e){ console.error("feed",e); }
+}
+async function pushFeed(f){
+  try{
+    const txt=JSON.stringify(f), h=Array.from(txt).reduce((a,c)=>(a*31+c.charCodeAt(0))|0,7);
+    if(localStorage.getItem("wd_feed_hash")===String(h)) return;
+    const u=`https://api.github.com/repos/${GH.owner}/${GH.repo}/contents/inventory/dashboard_feed.json`;
+    const g=await fetch(u+"?ref="+encodeURIComponent(GH.branch||"main")+"&t="+Date.now(),{headers:ghHead()});
+    const body={message:"Dashboard feed for inventory costing",content:b64e(txt),branch:GH.branch||"main"};
+    if(g.ok) body.sha=(await g.json()).sha;
+    const r=await fetch(u,{method:"PUT",headers:{...ghHead(),"Content-Type":"application/json"},body:JSON.stringify(body)});
+    if(r.ok) localStorage.setItem("wd_feed_hash",String(h));
+  }catch(e){ console.error("feed push",e); }
+}
+function invCard(){
+  let s=null; try{ s=JSON.parse(localStorage.getItem("wd_inv_summary")||"null"); }catch(e){}
+  if(!s) return `<div class="card" style="margin-bottom:16px"><b>🧮 ইনভেন্টরি কস্টিং ও ট্যাক্স</b><div style="color:#667;font-size:13px;margin:4px 0 8px">লাভ, ভ্যাট/টার্নওভার ট্যাক্স ও আয়কর অটো-হিসাব করতে ইনভেন্টরি পেজ একবার খুলুন।</div><button class="btn" onclick="go('inventory')">ইনভেন্টরি কস্টিং খুলুন</button></div>`;
+  const k=(l,v)=>`<div><small style="color:#667">${l}</small><div style="font-size:18px;font-weight:700">${v}</div></div>`;
+  return `<div class="card" style="margin-bottom:16px"><div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><b>🧮 ইনভেন্টরি কস্টিং ও ট্যাক্স — ${s.month}</b><button class="btn" onclick="go('inventory')">বিস্তারিত →</button></div>
+   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-top:10px">
+   ${k("গ্রস প্রফিট (FIFO)",money(s.gp))}${k("নেট প্রফিট",money(s.net))}${k("ভ্যাট/টার্নওভার (মাস)",money(s.indirect))}${k("আয়কর (আনুমানিক, FY)",money(s.incomeTax))}${k("কর-পরবর্তী লাভ (FY)",money(s.afterTaxFY))}</div>
+   <div style="color:#889;font-size:11px;margin-top:8px">আনুমানিক হিসাব — চূড়ান্ত রিটার্নের আগে হিসাবরক্ষকের সাথে মিলিয়ে নিন।</div></div>`;
 }
 /* ============ GitHub sync (Contents API) ============ */
 const b64e = s => { const b=new TextEncoder().encode(s); let r=""; b.forEach(x=>r+=String.fromCharCode(x)); return btoa(r); };
@@ -368,6 +420,7 @@ function vDash(){
   const recent=[...S.orders].sort((a,b)=>(b.date+b.inv).localeCompare(a.date+a.inv)).slice(0,8);
   const kp=(c,ic,l,v,sub)=>`<div class="kpi ${c}"><div class="kic">${ic}</div><small>${l}</small><b>${v}</b>${sub?`<div class="ksub">${sub}</div>`:""}</div>`;
   return `<h2>ড্যাশবোর্ড</h2>
+  ${invCard()}
   <div class="grid g4" style="margin-bottom:16px">
     ${kp("k1","🛒","আজকের বিক্রয়",money(td.sales),td.count+" টি ইনভয়েস")}${kp("k2","💹","আজকের লাভ",money(td.profit+td.mfs))}
     ${kp("k3","📅","এই মাসের বিক্রয়",money(ms.sales),ms.count+" টি ইনভয়েস")}${kp("k4","🏦","এই মাসের নিট লাভ",money(ms.net),"খরচ বাদে")}
@@ -911,7 +964,7 @@ function disconnect(){ if(!confirm("টোকেন এই ব্রাউজা
 function importJSON(f){ if(!f) return; const r=new FileReader(); r.onload=()=>{ try{ S=Object.assign(blank(),JSON.parse(r.result)); save(); toast("ইমপোর্ট সম্পন্ন"); }catch(e){ alert("ফাইল ঠিক নয়"); } }; r.readAsText(f); }
 
 window.addEventListener("beforeunload",e=>{ if(!skipUnload&&META.dirty&&ghReady()){ e.preventDefault(); e.returnValue=""; } });
-function boot(){ render(); if(ghReady()) pull(); }
+function boot(){ render(); writeFeed(); if(ghReady()) pull(); }
 if(SEC) showLock(); else boot();
 </script>
 </body>

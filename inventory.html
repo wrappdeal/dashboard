@@ -68,6 +68,7 @@ label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
 <script>
 //CALC-START
 const KEY='wd_inv_v1', GHKEY='wd_inv_gh', DIRTY='wd_inv_dirty';
+const DEF_SLABS=[{label:'Next slab 1',width:400000,rate:10},{label:'Next slab 2',width:500000,rate:15},{label:'Next slab 3',width:500000,rate:20},{label:'Next slab 4',width:1875000,rate:25},{label:'Next slab 5',width:26350000,rate:30},{label:'Balance',width:'',rate:35}];
 const DEF_BANDS=[
  {label:'0-30 days',from:0,cls:'Fresh stock',resp:'Normal sales monitoring.'},
  {label:'31-60 days',from:31,cls:'Regular stock',resp:'Check sales velocity against plan.'},
@@ -100,7 +101,7 @@ function nextM(m){let[y,mo]=m.split('-').map(Number);mo++;if(mo>12){mo=1;y++;}re
 function daysBetween(a,b){return Math.round((Date.parse(b)-Date.parse(a))/864e5);}
 function monLabel(m){return new Date(m+'-01T00:00:00Z').toLocaleString('en-AU',{month:'short',year:'numeric',timeZone:'UTC'});}
 function curMonth(){const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');}
-function blank(){return{v:1,settings:{month:curMonth(),capRate:12,nonMoving:365,block:181,approval:10000,maxCover:3,method:'Lot cost, FIFO',bands:JSON.parse(JSON.stringify(DEF_BANDS))},skus:[],lots:[],moves:[],pools:[],drivers:[],nrv:[],actions:[],checks:{},purchases:[],close:[],decisions:DECISIONS.map(x=>({decision:x[0],recommended:x[1],decided:'',date:''}))};}
+function blank(){return{v:1,settings:{month:curMonth(),capRate:12,nonMoving:365,block:181,approval:10000,maxCover:3,method:'Lot cost, FIFO',vatMode:'none',vatRate:15,turnoverRate:4,priceIncVat:'No',costIncVat:'No',claimPct:100,itMode:'individual',threshold:375000,minTax:5000,flatRate:25,projection:'Yes',aitPaid:0,autoImport:'Yes',feedStamp:'',slabs:JSON.parse(JSON.stringify(DEF_SLABS)),bands:JSON.parse(JSON.stringify(DEF_BANDS))},skus:[],lots:[],moves:[],income:[],pools:[],drivers:[],nrv:[],actions:[],checks:{},purchases:[],close:[],decisions:DECISIONS.map(x=>({decision:x[0],recommended:x[1],decided:'',date:''}))};}
 let S=blank();
 
 function unitCost(l){return n(l.qty)>0?n(l.price)+n(l.landed)/n(l.qty):null;}
@@ -211,16 +212,42 @@ function skuCost(code,m){const inf=S.lots.filter(l=>l.sku===code).map(l=>lotInfo
   const last=S.lots.filter(l=>l.sku===code&&unitCost(l)!=null).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];return last?unitCost(last):null;}
 function monthCogs(mm){return S.moves.filter(x=>x.month===mm).reduce((s,x)=>{const l=S.lots.find(l=>l.ref===x.lot),uc=l?unitCost(l):null;return s+(uc==null?0:(n(x.sales)-n(x.retIn))*uc);},0);}
 function poolSum(mm,ids){return S.pools.filter(p=>p.month===mm&&ids.includes(p.pool)).reduce((s,p)=>s+n(p.amount),0);}
+function othSum(mm){return S.income.filter(x=>x.month===mm).reduce((s,x)=>s+n(x.amount),0);}
+function fyOf(m){const y=+m.slice(0,4),mo=+m.slice(5),sy=mo>=7?y:y-1,list=[];let c=sy+'-07';while(c<=m){list.push(c);c=c.slice(5)==='12'?(+c.slice(0,4)+1)+'-01':c.slice(0,5)+String(+c.slice(5)+1).padStart(2,'0');}return{sy,list,label:'FY '+sy+'-'+String(sy+1).slice(2)};}
 function profit(m){
   const y=m.slice(0,4),months=[];for(let k=1;k<=+m.slice(5);k++)months.push(y+'-'+String(k).padStart(2,'0'));
-  const wdNow=report(m).wd,wdPrev=report(prevM(m)).wd,wdYearStart=report((+y-1)+'-12').wd;
+  const fy=fyOf(m);
+  const wdNow=report(m).wd,wdPrev=report(prevM(m)).wd,wdYearStart=report((+y-1)+'-12').wd,wdFyStart=report(prevM(fy.list[0])).wd;
   const calc=(ms,wdChg)=>{
-    const rev=ms.reduce((s,mm)=>s+S.moves.filter(x=>x.month===mm).reduce((a,x)=>a+moveRevenue(x),0),0),cogs=ms.reduce((s,mm)=>s+monthCogs(mm),0);
+    const rev=ms.reduce((s,mm)=>s+S.moves.filter(x=>x.month===mm).reduce((a,x)=>a+moveRevenue(x),0),0),cogs=ms.reduce((s,mm)=>s+monthCogs(mm),0),oth=ms.reduce((s,mm)=>s+othSum(mm),0);
     const wh=ms.reduce((s,mm)=>s+poolSum(mm,['P01','P02','P03','P04','P05','P06']),0),idle=ms.reduce((s,mm)=>s+poolSum(mm,['P07']),0),
       fin=ms.reduce((s,mm)=>s+poolSum(mm,['P08']),0),opex=ms.reduce((s,mm)=>s+poolSum(mm,['P09']),0),gp=rev-cogs;
-    return{rev,cogs,gp,margin:rev>0?gp/rev:null,wh,idle,fin,opex,wdChg,net:gp-wh-idle-fin-opex-wdChg};};
-  return{month:calc([m],wdNow-wdPrev),ytd:calc(months,wdNow-wdYearStart)};
+    return{rev,cogs,oth,gp,margin:rev>0?gp/rev:null,wh,idle,fin,opex,wdChg,net:gp+oth-wh-idle-fin-opex-wdChg};};
+  return{month:calc([m],wdNow-wdPrev),ytd:calc(months,wdNow-wdYearStart),fy:calc(fy.list,wdNow-wdFyStart),fyInfo:fy};
 }
+function lotsBought(mm){return S.lots.filter(l=>(l.date||'').slice(0,7)===mm).reduce((s,l)=>s+n(l.qty)*n(l.price),0);}
+function slabTax(inc,thr,slabs){let left=Math.max(0,inc),tax=0,from=0;const parts=[];
+  const seg=(w,r,lab)=>{const take=w===''||w==null?left:Math.min(left,n(w));const amt=take*r/100;parts.push({lab,from,to:from+take,rate:r,take,amt});tax+=amt;left-=take;from+=take;};
+  seg(n(thr),0,'Tax-free threshold');slabs.forEach(sl=>{if(left>0)seg(sl.width,n(sl.rate),sl.label);});return{tax,parts};}
+function indirect(ms,P,st){
+  const turnover=P.rev+P.oth,r=n(st.vatRate)/100;let out=0,inn=0,tt=0,adj=0;
+  if(st.vatMode==='turnover'){tt=turnover*n(st.turnoverRate)/100;out=tt;}
+  else if(st.vatMode==='vat'){const incP=st.priceIncVat==='Yes',incC=st.costIncVat==='Yes',claim=n(st.claimPct)/100;
+    out=incP?turnover*r/(1+r):turnover*r;
+    const buy=ms.reduce((s,mm)=>s+lotsBought(mm),0);inn=(incC?buy*r/(1+r):buy*r)*claim;
+    adj=(incP?-out:0)+(incC?P.cogs*r/(1+r)*claim:0);}
+  return{turnover,out,inn,payable:out-inn,tt,adj};}
+function taxCalc(m){
+  const st=S.settings,P=profit(m),fy=P.fyInfo,el=fy.list.length;
+  const im=indirect([m],P.month,st),iy=indirect(fy.list,P.fy,st);
+  const ptb=P.fy.net+iy.adj-iy.tt;
+  const annual=st.projection==='Yes'?ptb/el*12:ptb,base=Math.max(0,annual);
+  let annualTax=0,parts=[],minApplied=false;
+  if(st.itMode==='individual'){const r=slabTax(base,st.threshold,st.slabs);annualTax=r.tax;parts=r.parts;
+    if(base>n(st.threshold)&&annualTax<n(st.minTax)){annualTax=n(st.minTax);minApplied=true;}}
+  else if(st.itMode==='flat'){annualTax=base*n(st.flatRate)/100;}
+  const ytdTax=annualTax*(st.projection==='Yes'?el/12:1),balance=ytdTax-n(st.aitPaid);
+  return{P,fy,el,im,iy,ptb,annual,annualTax,ytdTax,balance,afterTax:ptb-ytdTax,parts,minApplied};}
 function sampleData(){
   const d=blank();d.settings.month='2026-11';
   d.skus=[['CLO-SHIRT-01','Cotton shirt (assorted sizes)','Clothing','SAMPLE supplier A','pcs',20,150],['PKG-BOX-M','Corrugated mailer box - medium','Packaging','SAMPLE supplier B','pcs',500,4000],
@@ -251,6 +278,7 @@ function sampleData(){
 
 // ---------- persistence ----------
 //IO-START
+const STRK=['month','method','vatMode','priceIncVat','costIncVat','itMode','projection','autoImport','feedStamp'];
 const SCHEMA={
  skus:{file:'skus.csv',title:'Products (SKU master)',cols:[['code','SKU code','text'],['name','Product','text'],['category','Category',['Packaging','Clothing','Leather goods','Accessories','Other']],['supplier','Supplier','text'],['unit','Unit',['pcs','pack','roll','kg','carton']],['active','Active',['Yes','No']],['markPrice','Marked price (MRP)','number'],['sellPrice','Selling price','number'],['reorder','Reorder point','number'],['max','Max stock','number']]},
  lots:{file:'purchase_lots.csv',title:'Purchase lots',cols:[['ref','Lot ref','text'],['date','Receipt date','date'],['sku','SKU','text'],['qty','Qty received','number'],['price','Unit price','number'],['landed','Landed costs (lot)','number'],['preOut','Out before tracking','number'],['doc','Doc ref','text']]},
@@ -262,10 +290,12 @@ const SCHEMA={
  purchases:{file:'purchase_requests.csv',title:'Purchase requests',cols:[['id','ID','text'],['date','Date','date'],['sku','SKU','text'],['qty','Qty','number'],['price','Unit price','number'],['lead','Lead time (days)','number'],['moq','Supplier MOQ','number'],['reason','Reason','text'],['status','Status',['Requested','Approved','Rejected','Ordered','Received']],['approver','Approver','text']]},
  close:{file:'month_close.csv',title:'Month close sign-off',cols:[['month','Month','month'],['countedBy','Counted by','text'],['countDate','Count date','date'],['signedBy','Signed off by','text'],['minutes','Meeting minutes / notes','text']]},
  decisions:{file:'partner_decisions.csv',title:'Partner decisions',cols:[['decision','Decision','text'],['recommended','Recommended start','text'],['decided','WrappDeal decision','text'],['date','Date agreed','date']]},
+ income:{file:'other_income.csv',title:'Other income (delivery charges)',cols:[['month','Month','month'],['type','Type','text'],['amount','Amount (BDT)','number'],['source','Source','text']]},
+ slabs:{file:'tax_slabs.csv',title:'Income tax slabs',cols:[['label','Slab','text'],['width','Slab width (BDT, blank = balance)','number'],['rate','Rate %','number']]},
  bands:{file:'ageing_bands.csv',title:'Ageing bands',cols:[['label','Band label','text'],['from','From (days)','number'],['cls','Classification','text'],['resp','Suggested response','text']]}
 };
-function getArr(k){return k==='bands'?S.settings.bands:S[k];}
-function setArr(k,a){if(k==='bands')S.settings.bands=a;else S[k]=a;}
+function getArr(k){return k==='bands'||k==='slabs'?S.settings[k]:S[k];}
+function setArr(k,a){if(k==='bands'||k==='slabs')S.settings[k]=a;else S[k]=a;}
 function csvStr(rows){return rows.map(r=>r.map(c=>{c=c==null?'':String(c);return /[",\r\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',')).join('\r\n')+'\r\n';}
 function csvParse(t){const rows=[];let r=[],c='',q=false;
  for(let i=0;i<t.length;i++){const ch=t[i];
@@ -279,13 +309,13 @@ function tableToCsv(k){const sc=SCHEMA[k];return csvStr([sc.cols.map(c=>c[0])].c
 function csvToTable(k,text){const rows=csvParse(String(text).replace(/^﻿/,''));if(!rows.length)return[];const h=rows.shift();
  return rows.map(r=>{const o={};SCHEMA[k].cols.forEach(c=>{const i=h.indexOf(c[0]);o[c[0]]=i>=0&&r[i]!=null?r[i]:'';});return o;});}
 function allFiles(){const f={};Object.keys(SCHEMA).forEach(k=>f[SCHEMA[k].file]=tableToCsv(k));
- const st=S.settings;f['settings.csv']=csvStr([['key','value'],['month',st.month],['capRate',st.capRate],['nonMoving',st.nonMoving],['block',st.block],['approval',st.approval],['maxCover',st.maxCover],['method',st.method]]);
+ const st=S.settings;f['settings.csv']=csvStr([['key','value']].concat(Object.keys(st).filter(k=>k!=='bands'&&k!=='slabs').map(k=>[k,st[k]])));
  const ck=[['month','step','done']];Object.keys(S.checks).forEach(m=>Object.keys(S.checks[m]).forEach(i=>{if(S.checks[m][i])ck.push([m,i,'true']);}));
  f['close_checklist.csv']=csvStr(ck);return f;}
 function fileNames(){return Object.keys(SCHEMA).map(k=>SCHEMA[k].file).concat(['settings.csv','close_checklist.csv']);}
 function applyFiles(map){const d=blank();
- Object.keys(SCHEMA).forEach(k=>{const t=map[SCHEMA[k].file];if(t!=null){const a=csvToTable(k,t);if(k==='bands'){if(a.length)d.settings.bands=a.map(b=>Object.assign(b,{from:n(b.from)}));}else d[k]=a;}});
- if(map['settings.csv'])csvParse(map['settings.csv']).slice(1).forEach(r=>{const k=r[0],v=r[1]==null?'':r[1];if(k==='month'||k==='method')d.settings[k]=v;else if(k in d.settings&&k!=='bands')d.settings[k]=n(v);});
+ Object.keys(SCHEMA).forEach(k=>{const t=map[SCHEMA[k].file];if(t!=null){const a=csvToTable(k,t);if(k==='bands'){if(a.length)d.settings.bands=a.map(b=>Object.assign(b,{from:n(b.from)}));}else if(k==='slabs'){if(a.length)d.settings.slabs=a;}else d[k]=a;}});
+ if(map['settings.csv'])csvParse(map['settings.csv']).slice(1).forEach(r=>{const k=r[0],v=r[1]==null?'':r[1];if(STRK.includes(k))d.settings[k]=v;else if(k in d.settings&&k!=='bands'&&k!=='slabs')d.settings[k]=n(v);});
  if(map['close_checklist.csv'])csvParse(map['close_checklist.csv']).slice(1).forEach(r=>{if(r[0]){d.checks[r[0]]=d.checks[r[0]]||{};d.checks[r[0]][r[1]]=(r[2]==='true'||r[2]==='1');}});
  return d;}
 //IO-END
@@ -336,6 +366,62 @@ async function ghPush(silent){
   }catch(e){syncState='Push failed: '+e.message;setSync();if(!silent)alert(syncState);}
 }
 
+
+// ---------- link to the main dashboard ----------
+const EXPMAP={'Rent / Utilities':'P01','Salary':'P02','Packaging materials':'P04','Courier / Delivery':'P09','Ads / Boost':'P09','Transport':'P09','Other':'P09'};
+function readFeedLocal(){try{return JSON.parse(localStorage.getItem('wd_feed_v1')||'null');}catch(e){return null;}}
+async function fetchFeedRemote(){if(!GH.token)return null;const r=await api('/contents/'+encPath(dirPath()+'dashboard_feed.json')+'?ref='+encodeURIComponent(GH.branch)+'&t='+Date.now());if(!r.ok)return null;try{return JSON.parse(b64d((await r.json()).content));}catch(e){return null;}}
+function importFeed(f){
+  const mine=r=>/^(DB-|OPEN-)/.test(r);
+  const oldRefs=new Set(S.lots.filter(l=>mine(l.ref)).map(l=>l.ref));
+  S.lots=S.lots.filter(l=>!oldRefs.has(l.ref));S.moves=S.moves.filter(x=>!oldRefs.has(x.lot));
+  S.income=S.income.filter(x=>x.source!=='dashboard');S.pools=S.pools.filter(x=>!String(x.source||'').startsWith('dashboard'));
+  let newSku=0;
+  (f.products||[]).forEach(p=>{if(!p.code)return;let k=S.skus.find(x=>x.code===p.code);
+    if(!k){S.skus.push({code:p.code,name:p.name,category:'Other',supplier:'',unit:'pcs',active:'Yes',markPrice:'',sellPrice:p.price||'',reorder:'',max:''});newSku++;}
+    else if(!has(k.sellPrice)&&p.price)k.sellPrice=p.price;});
+  let nLots=0,nMoves=0,months=new Set();
+  (f.products||[]).forEach(p=>{if(!p.code)return;
+    const buys=(f.purchases||[]).filter(u=>u.code===p.code&&n(u.qty)>0).sort((a,b)=>String(a.date).localeCompare(String(b.date)));
+    const sal=(f.sales||[]).filter(x=>x.code===p.code&&n(x.qty)>0).sort((a,b)=>a.month.localeCompare(b.month));
+    const sold=sum(sal,x=>n(x.qty)),bought=sum(buys,u=>n(u.qty));
+    const open=Math.max(0,n(p.stock)+sold-bought,sold-bought);
+    const first=[buys[0]&&String(buys[0].date).slice(0,10),sal[0]&&sal[0].month+'-01'].filter(Boolean).sort()[0]||new Date().toISOString().slice(0,10);
+    const lots=[];
+    if(open>0)lots.push({ref:'OPEN-'+p.code,date:first,sku:p.code,qty:open,price:n(p.cost),landed:0,preOut:0,doc:'dashboard opening stock'});
+    buys.forEach((u,i)=>lots.push({ref:'DB-'+p.code+'-'+(i+1),date:String(u.date).slice(0,10),sku:p.code,qty:n(u.qty),price:n(u.cost),landed:0,preOut:0,doc:'dashboard purchase'}));
+    lots.sort((a,b)=>a.date.localeCompare(b.date));
+    lots.forEach(l=>{l.left=n(l.qty);});
+    sal.forEach(x=>{let need=n(x.qty);const tot=n(x.qty),rv=n(x.revenue);
+      const pick=()=>lots.find(l=>l.left>0&&l.date.slice(0,7)<=x.month)||lots.find(l=>l.left>0);
+      while(need>0){const l=pick();if(!l)break;const q=Math.min(l.left,need);l.left-=q;need-=q;
+        let mv=S.moves.find(y=>y.month===x.month&&y.lot===l.ref);if(!mv){mv={month:x.month,lot:l.ref,sales:0,retIn:0,retOut:0,other:0,count:'',revenue:0};S.moves.push(mv);nMoves++;}
+        mv.sales=n(mv.sales)+q;mv.revenue=Math.round((n(mv.revenue)+rv*q/tot)*100)/100;months.add(x.month);}});
+    lots.forEach(l=>{delete l.left;S.lots.push(l);nLots++;});});
+  (f.monthly||[]).forEach(x=>{if(n(x.delivery)>0)S.income.push({month:x.month,type:'Delivery charges',amount:Math.round(n(x.delivery)*100)/100,source:'dashboard'});});
+  const pm={};(f.expenses||[]).forEach(e=>{const id=EXPMAP[e.cat]||'P09';const k=e.month+'|'+id;pm[k]=(pm[k]||0)+n(e.amount);});
+  (f.monthly||[]).forEach(x=>{if(n(x.courier)>0){const k=x.month+'|P09';pm[k]=(pm[k]||0)+n(x.courier);}});
+  let skipped=0,nPools=0;
+  Object.entries(pm).forEach(([k,a])=>{const[m,id]=k.split('|');if(S.pools.find(y=>y.month===m&&y.pool===id)){skipped++;return;}
+    S.pools.push({month:m,pool:id,amount:Math.round(a*100)/100,source:'dashboard'});nPools++;months.add(m);});
+  const all=[...months].sort();if(all.length&&!all.includes(S.settings.month))S.settings.month=all[all.length-1];
+  S.settings.feedStamp=f.updated||'';
+  return'Imported from dashboard: '+nLots+' lots, '+nMoves+' movement rows, '+nPools+' cost-pool rows'+(newSku?', '+newSku+' new products':'')+(skipped?' ('+skipped+' pool rows skipped - you entered them manually)':'')+(f.unmapped?' · '+f.unmapped+' order lines had no matching product':'')+'.';
+}
+async function doImport(remote){
+  let f=remote?null:readFeedLocal();
+  if(!f)f=await fetchFeedRemote();
+  if(!f){alert('No dashboard feed found. Open the main dashboard in this browser once (or sign in with the same GitHub token) so it can publish the feed.');return;}
+  const msg=importFeed(f);syncState=msg;save();render();
+}
+function autoImport(){
+  if(S.settings.autoImport==='No')return;const f=readFeedLocal();
+  if(!f||!f.updated||f.updated===S.settings.feedStamp)return;
+  syncState=importFeed(f);save();render();
+}
+function writeSummary(){try{const m=S.settings.month,T=taxCalc(m);
+  localStorage.setItem('wd_inv_summary',JSON.stringify({month:m,gp:T.P.month.gp,net:T.P.month.net,indirect:T.im.payable,incomeTax:T.ytdTax,afterTaxFY:T.afterTax,updated:new Date().toISOString()}));}catch(e){}}
+
 // ---------- ui helpers ----------
 const inp=(a,attrs,val,type='number',cls='')=>`<input class="in ${cls}" data-a="${a}" ${Object.entries(attrs).map(([k,v])=>`data-${k}="${esc(v)}"`).join(' ')} data-id="${a}|${Object.values(attrs).map(esc).join('|')}" type="${type}" ${type==='number'?'step="any" inputmode="decimal"':''} value="${esc(val==null?'':val)}">`;
 const sel=(a,attrs,val,opts,cls='')=>`<select class="in ${cls}" data-a="${a}" ${Object.entries(attrs).map(([k,v])=>`data-${k}="${esc(v)}"`).join(' ')} data-id="${a}|${Object.values(attrs).map(esc).join('|')}">${opts.map(o=>`<option ${o===val?'selected':''}>${esc(o)}</option>`).join('')}</select>`;
@@ -347,7 +433,7 @@ function nextLotRef(){const y=new Date().getFullYear();let k=1;while(S.lots.find
 function table(heads,rows,foot){return `<div class="tw"><table><tr>${heads.map(h=>`<th class="${Array.isArray(h)?(h[1]||''):''}">${Array.isArray(h)?h[0]:h}</th>`).join('')}</tr>${rows.join('')}${foot||''}</table></div>`;}
 
 // ---------- screens ----------
-const TABS=[['dashboard','Dashboard'],['move','Stock movements'],['cost','Costs'],['nrv','NRV review'],['setup','Products & lots'],['buy','Purchasing'],['review','Partner review'],['act','Actions'],['data','Data tables (CSV)'],['set','Settings & data']];
+const TABS=[['dashboard','Dashboard'],['move','Stock movements'],['cost','Costs'],['nrv','NRV review'],['setup','Products & lots'],['buy','Purchasing'],['review','Partner review'],['act','Actions'],['tax','Tax & dashboard link'],['data','Data tables (CSV)'],['set','Settings & data']];
 function emptyMsg(){return S.lots.length?'':`<div class="msg">No stock recorded yet. Add products and lots under <b>Products &amp; lots</b>, or <b>Settings &amp; data → Load sample data</b> to see how it works.</div>`;}
 
 function vDashboard(){
@@ -378,7 +464,7 @@ function vDashboard(){
   </div></div>`;
   const PR=profit(m),pr=(l,k,b)=>`<tr${b?' class="tot"':''}><td>${l}</td><td class="r">${k==='margin'?pc(PR.month.margin):f0(PR.month[k])}</td><td class="r">${k==='margin'?pc(PR.ytd.margin):f0(PR.ytd[k])}</td></tr>`;
   h+=`<div class="card"><h2>Profit · ${monLabel(m)} <span class="note">(management estimate, before tax)</span></h2>${table(['BDT',['This month','r'],['Year to date','r']],[
-   pr('Sales revenue','rev'),pr('Less: cost of goods sold','cogs'),pr('Gross profit','gp',1),pr('Gross margin','margin'),
+   pr('Sales revenue','rev'),pr('Less: cost of goods sold','cogs'),pr('Gross profit','gp',1),pr('Gross margin','margin'),pr('Add: delivery charges collected','oth'),
    pr('Less: warehouse &amp; holding costs (actual)','wh'),pr('Less: idle / abnormal cost','idle'),pr('Less: NRV write-down (reversal reduces cost)','wdChg'),
    pr('Less: actual financing expense','fin'),pr('Less: other operating expenses (P09)','opex'),pr('Net profit before tax','net',1)])}
    <div class="note">Revenue = units sold × the selling price you set on each product (Products &amp; lots), or the amount you type on Stock movements. Marketing, courier and admin costs go on Costs as P09 - leave P09 empty if your main dashboard tracks those separately (then this is inventory-level profit). Capital blockage is not an expense and is excluded. Holding costs use the actual pool totals once, so nothing is double counted. Not tax or statutory profit.</div></div>`;
@@ -547,6 +633,58 @@ function vData(){
    <div class="note">${arr.length} row${arr.length===1?'':'s'}.</div></div>`;
 }
 
+
+function vTax(){
+  const m=S.settings.month,st=S.settings,T=taxCalc(m),fy=T.fy,feed=readFeedLocal();
+  const pc2=v=>v==null?'–':(v*100).toFixed(1)+'%';
+  let h=`<div class="card"><h2>Dashboard link <span class="note">(main dashboard → this app)</span></h2>
+   <div class="note">The main dashboard publishes a plain monthly summary (products, purchases, sales by product, expenses - <b>no customer names, phones or addresses</b>). This app turns it into FIFO lots, sales movements, revenue and cost pools, then calculates profit and tax. Rows it creates are named <b>DB-…</b> / <b>OPEN-…</b> / source <b>dashboard</b> and are rebuilt on every import; anything you type yourself is never touched.</div>
+   <p>${feed?`Feed on this device: <b>${(feed.products||[]).length}</b> products, <b>${(feed.sales||[]).length}</b> monthly sales lines, last updated <b>${esc(feed.updated||'-')}</b>${feed.updated===st.feedStamp?' · <span class="chip good">already imported</span>':' · <span class="chip warn">new data waiting</span>'}`:'<span class="chip warn">No feed on this device yet</span> Open the main dashboard in this browser once, or use the GitHub token.'}</p>
+   <div class="frm"><div><label>Auto-import when this page opens</label>${sel('setting',{f:'autoImport'},st.autoImport,['Yes','No'])}</div></div>
+   <p><button class="btn" id="impBtn">Import from dashboard now</button> <button class="btn sec" id="impRemoteBtn">Import from GitHub copy</button></p>
+   <div class="note">Dashboard expense categories map to cost pools: Rent / Utilities → P01, Salary → P02, Packaging → P04, and Courier, Ads, Transport, Other (plus per-order courier cost) → P09. Delivery charges collected become other income. Orders that are not Cancelled or Returned count as sales, the same rule the dashboard uses for stock.</div></div>`;
+  h+=`<div class="card"><h2>Tax settings <span class="note">(all rates editable)</span></h2><div class="frm">
+   <div><label>VAT / turnover tax</label>${sel('setting',{f:'vatMode'},st.vatMode,['none','turnover','vat'])}<div class="note">none = below the registration threshold · turnover = enlisted small business · vat = registered</div></div>
+   <div><label>Standard VAT rate (%)</label>${inp('setting',{f:'vatRate'},st.vatRate)}</div>
+   <div><label>Turnover tax rate (%)</label>${inp('setting',{f:'turnoverRate'},st.turnoverRate)}<div class="note">Check the current rate for your turnover band.</div></div>
+   <div><label>Selling prices include VAT?</label>${sel('setting',{f:'priceIncVat'},st.priceIncVat,['No','Yes'])}</div>
+   <div><label>Purchase prices include VAT?</label>${sel('setting',{f:'costIncVat'},st.costIncVat,['No','Yes'])}</div>
+   <div><label>Input VAT claimable (%)</label>${inp('setting',{f:'claimPct'},st.claimPct)}</div>
+   <div><label>Income tax method</label>${sel('setting',{f:'itMode'},st.itMode,['individual','flat','none'])}<div class="note">individual = sole proprietor slabs · flat = company rate</div></div>
+   <div><label>Tax-free threshold (BDT / year)</label>${inp('setting',{f:'threshold'},st.threshold)}</div>
+   <div><label>Minimum tax (BDT)</label>${inp('setting',{f:'minTax'},st.minTax)}</div>
+   <div><label>Flat company rate (%)</label>${inp('setting',{f:'flatRate'},st.flatRate)}</div>
+   <div><label>Annualise year-to-date profit?</label>${sel('setting',{f:'projection'},st.projection,['Yes','No'])}<div class="note">Yes = estimate the full-year tax from profit so far.</div></div>
+   <div><label>Advance tax already paid / deducted (BDT, this year)</label>${inp('setting',{f:'aitPaid'},st.aitPaid)}</div></div>
+   <h3>Income tax slabs (individual)</h3>${table(['Slab',['Width (BDT)','r'],['Rate %','r']],st.slabs.map((x,i)=>`<tr><td>${inp('grid',{t:'slabs',i,f:'label'},x.label,'text')}</td><td>${inp('grid',{t:'slabs',i,f:'width'},x.width)}</td><td>${inp('grid',{t:'slabs',i,f:'rate'},x.rate)}</td></tr>`))}
+   <div class="note"><b>Verify these defaults.</b> They follow the FY2026-27 budget reporting (tax-free Tk 375,000, the 5% slab removed, 30% up to Tk 3 crore and 35% above, flat minimum tax Tk 5,000), but the middle slab widths are approximated and sources differ (one reports Tk 400,000). Replace them with the table your accountant confirms. Leave the last width blank for the balance.</div></div>`;
+  const rw=(l,a,b,bold)=>`<tr${bold?' class="tot"':''}><td>${l}</td><td class="r">${f0(a)}</td><td class="r">${b===undefined?'':f0(b)}</td></tr>`;
+  h+=`<div class="card"><h2>1. VAT / turnover tax <span class="note">(${st.vatMode==='none'?'not applied - switch on above if registered':st.vatMode==='vat'?'standard VAT':'turnover tax'})</span></h2>${table(['BDT',['Month '+monLabel(m),'r'],['Year to date ('+fy.label+')','r']],[
+   rw('Taxable turnover (sales + delivery charges)',T.im.turnover,T.iy.turnover),
+   st.vatMode==='vat'?rw('Output VAT',T.im.out,T.iy.out):'',st.vatMode==='vat'?rw('Less: input VAT on purchases',T.im.inn,T.iy.inn):'',
+   st.vatMode==='turnover'?rw('Turnover tax',T.im.tt,T.iy.tt):'',
+   rw(st.vatMode==='vat'?'VAT payable to NBR':'Tax payable (VAT / turnover)',T.im.payable,T.iy.payable,1)].filter(Boolean))}
+   <div class="note">Turnover tax is treated as a deductible business cost; with VAT-inclusive prices the VAT part is removed from profit. Confirm treatment and filing dates with your accountant.</div></div>`;
+  h+=`<div class="card"><h2>2. Income tax estimate · ${fy.label} <span class="note">(July – June, ${T.el} month${T.el>1?'s':''} so far)</span></h2>${table(['BDT',['Amount','r']],[
+   `<tr><td>Net profit before tax, year to date (from the profit table)</td><td class="r">${f0(T.P.fy.net)}</td></tr>`,
+   `<tr><td>VAT / turnover tax adjustments</td><td class="r">${f0(T.iy.adj-T.iy.tt)}</td></tr>`,
+   `<tr class="tot"><td>Profit before income tax, year to date</td><td class="r">${f0(T.ptb)}</td></tr>`,
+   `<tr><td>${st.projection==='Yes'?'Annualised taxable profit (× 12 ÷ '+T.el+')':'Taxable profit used'}</td><td class="r">${f0(T.annual)}</td></tr>`].concat(
+   T.parts.filter(x=>x.take>0).map(x=>`<tr><td class="note">&nbsp;&nbsp;${esc(x.lab)} · ${f0(x.take)} at ${x.rate}%</td><td class="r note">${f0(x.amt)}</td></tr>`),
+   [`<tr><td>Full-year income tax${T.minApplied?' (minimum tax applied)':''}</td><td class="r">${f0(T.annualTax)}</td></tr>`,
+    `<tr class="tot"><td>Income tax accrued to date</td><td class="r">${f0(T.ytdTax)}</td></tr>`,
+    `<tr><td>Less: advance tax already paid / deducted</td><td class="r">${f0(n(st.aitPaid))}</td></tr>`,
+    `<tr class="tot"><td>${T.balance>=0?'Still to provide for':'Credit / refundable'}</td><td class="r">${f0(Math.abs(T.balance))}</td></tr>`,
+    `<tr class="tot"><td>Profit after income tax, year to date</td><td class="r">${f0(T.afterTax)}</td></tr>`]))}
+   <div class="note">This is a planning estimate from your recorded data, not a tax return and not tax advice. Allowable expenses, depreciation, rebates, withholding credits and your personal income all change the real figure - confirm with a qualified accountant before filing. Rates live in the settings above because Bangladesh changes them in each budget.</div></div>`;
+  if(feed){const ms=fy.list;const dRev=sum((feed.sales||[]).filter(x=>x.month===m),x=>n(x.revenue)),dCogs=sum((feed.sales||[]).filter(x=>x.month===m),x=>n(x.cogsDash));
+    h+=`<div class="card"><h2>3. Check against the main dashboard · ${monLabel(m)}</h2>${table(['BDT',['Dashboard','r'],['This app (FIFO)','r']],[
+     `<tr><td>Product sales revenue</td><td class="r">${f0(dRev)}</td><td class="r">${f0(T.P.month.rev)}</td></tr>`,
+     `<tr><td>Cost of goods sold</td><td class="r">${f0(dCogs)}</td><td class="r">${f0(T.P.month.cogs)}</td></tr>`,
+     `<tr class="tot"><td>Gross profit</td><td class="r">${f0(dRev-dCogs)}</td><td class="r">${f0(T.P.month.gp)}</td></tr>`])}
+   <div class="note">Revenue should match. COGS can differ because the dashboard uses each product's stored cost while this app uses the actual FIFO purchase-lot cost - the gap is the costing difference you are controlling.</div></div>`;}
+  return h;
+}
 function vSet(){
   const st=S.settings;
   let h=`<div class="card"><h2>Policy settings <span class="note">(partners decide)</span></h2><div class="frm">
@@ -570,8 +708,8 @@ function vSet(){
 function render(){
   $('#nav').innerHTML=TABS.map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?'on':''}">${t[1]}</button>`).join('');
   $('#mSel').value=S.settings.month;
-  const v={dashboard:vDashboard,move:vMove,cost:vCost,nrv:vNrv,setup:vSetup,buy:vBuy,review:vReview,act:vAct,data:vData,set:vSet}[tab]();
-  $('#app').innerHTML=v;setSync();
+  const v={dashboard:vDashboard,move:vMove,cost:vCost,nrv:vNrv,setup:vSetup,buy:vBuy,review:vReview,act:vAct,tax:vTax,data:vData,set:vSet}[tab]();
+  $('#app').innerHTML=v;setSync();writeSummary();
 }
 function softRender(){setTimeout(()=>{const a=document.activeElement,id=a&&a.dataset&&a.dataset.id;render();if(id){const el=document.querySelector(`[data-id="${CSS.escape(id)}"]`);if(el){el.focus();if(el.select&&el.type!=='date'&&el.type!=='password')try{el.select();}catch(e){}}}},120);}
 
@@ -591,7 +729,7 @@ document.addEventListener('change',e=>{
   else if(a==='lot'){S.lots[+d.i][d.f]=val;}
   else if(a==='act')S.actions[+d.i][d.f]=val;
   else if(a==='band'){S.settings.bands[+d.i][d.f]=d.f==='from'?n(val):val;}
-  else if(a==='setting')S.settings[d.f]=d.f==='method'?val:n(val);
+  else if(a==='setting')S.settings[d.f]=STRK.includes(d.f)?val:n(val);
   else if(a==='chk'){S.checks[m]=S.checks[m]||{};S.checks[m][d.s]=val;}
   else if(a==='gh'){GH[d.f]=d.f==='auto'?val==='Yes':val.trim();localStorage.setItem(GHKEY,JSON.stringify(GH));return;}
   else return;
@@ -612,6 +750,7 @@ document.addEventListener('click',e=>{
   if(id==='zeroBtn'){const m=S.settings.month,R=report(m);R.infos.filter(i=>(i.open>0||i.received>0)&&!R.mv.find(x=>x.lot===i.ref)).forEach(i=>S.moves.push({month:m,lot:i.ref,sales:0,retIn:0,retOut:0,other:0,count:'',revenue:0}));save();render();}
   else if(id==='copyPools'){const m=S.settings.month,p=prevM(m);S.pools.filter(x=>x.month===p).forEach(x=>{if(!S.pools.find(y=>y.month===m&&y.pool===x.pool))S.pools.push(Object.assign({},x,{month:m}));});save();render();}
   else if(id==='copyDrv'){const m=S.settings.month,p=prevM(m);S.drivers.filter(x=>x.month===p).forEach(x=>{if(!S.drivers.find(y=>y.month===m&&y.lot===x.lot))S.drivers.push(Object.assign({},x,{month:m}));});save();render();}
+  else if(id==='impBtn')doImport(false);else if(id==='impRemoteBtn')doImport(true);
   else if(id==='pushBtn')ghPush(false);else if(id==='pullBtn'){if(confirm('Replace data on this device with the GitHub copy?'))ghPull(false);}
   else if(id==='expBtn'){const b=new Blob([JSON.stringify(S,null,1)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='wrappdeal-inventory-'+new Date().toISOString().slice(0,10)+'.json';a.click();}
   else if(id==='sampleBtn'){if(confirm('Replace current data with sample data?')){S=sampleData();save();tab='dashboard';render();}}
@@ -644,8 +783,8 @@ function exportCsv(){
   const csv=rows.map(r=>r.map(c=>{c=c==null?'':String(c);return /[",\n]/.test(c)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',')).join('\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download='wrappdeal-inventory-'+m+'.csv';a.click();
 }
-loadLocal();render();
-if(GH.token&&localStorage.getItem(DIRTY)!=='1')ghPull(true);
+loadLocal();autoImport();render();
+if(GH.token&&localStorage.getItem(DIRTY)!=='1')ghPull(true).then(autoImport);
 </script>
 </body>
 </html>
