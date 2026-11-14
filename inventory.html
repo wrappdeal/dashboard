@@ -416,7 +416,7 @@ function nextLotRef(){const y=new Date().getFullYear();let k=1;while(S.lots.find
 function table(heads,rows,foot){return `<div class="tw"><table><tr>${heads.map(h=>`<th class="${Array.isArray(h)?(h[1]||''):''}">${Array.isArray(h)?h[0]:h}</th>`).join('')}</tr>${rows.join('')}${foot||''}</table></div>`;}
 
 // ---------- screens ----------
-const TABS=[['guide','📖 গাইড (বাংলা)'],['dashboard','Dashboard'],['move','Stock movements'],['cost','Costs'],['nrv','NRV review'],['setup','Products & lots'],['buy','Purchasing'],['review','Partner review'],['act','Actions'],['tax','Tax & dashboard link'],['data','Data tables (CSV)'],['set','Settings & data']];
+const TABS=[['dashboard','Dashboard'],['move','Stock movements'],['cost','Costs'],['nrv','NRV review'],['setup','Products & lots'],['buy','Purchasing'],['review','Partner review'],['act','Actions'],['tax','Tax & dashboard link'],['data','Data tables (CSV)'],['set','Settings & data']];
 function emptyMsg(){return S.lots.length?'':`<div class="msg">No stock recorded yet. Add products and lots under <b>Products &amp; lots</b>, or <b>Settings &amp; data → Load sample data</b> to see how it works.</div>`;}
 
 function vDashboard(){
@@ -646,50 +646,6 @@ function vTax(){
   return h;
 }
 
-function vGuide(){
-  const sec=(ic,t,eng,what,steps,tip)=>`<div class="card"><h2>${ic} ${t} <span class="note">(${eng})</span></h2><p style="font-size:16px;line-height:1.7"><b>এটা কী?</b> ${what}</p><ol style="font-size:16px;line-height:1.9;padding-left:22px">${steps.map(x=>`<li>${x}</li>`).join('')}</ol>${tip?`<div class="msg" style="font-size:15px">💡 ${tip}</div>`:''}</div>`;
-  return `<div class="card" style="border-left:6px solid #F8BC00"><h2>📖 শুরুর আগে — এই অ্যাপ কী কাজ করে?</h2>
-   <p style="font-size:16px;line-height:1.8">আমাদের গুদামে যত মাল আছে তার <b>দাম কত</b>, কোন মাল <b>কতদিন ধরে পড়ে আছে</b>, আর মাস শেষে <b>আসলে কত লাভ হলো</b> — এই অ্যাপ সেটা হিসাব করে দেয়।</p>
-   <p style="font-size:16px;line-height:1.8"><b>সবচেয়ে সহজ নিয়ম:</b> আপনারা শুধু ঘরে (ঘর = সাদা বক্স) সংখ্যা লিখবেন। হিসাব অ্যাপ নিজে করবে। হলুদ বা ধূসর ঘরে লিখতে হয় না।</p>
-   <p style="font-size:16px;line-height:1.8"><b>মূল ড্যাশবোর্ড থেকে অটো আসে:</b> কেনা মাল, বিক্রি, খরচ ও ডেলিভারি চার্জ। তাই এগুলো আবার হাতে লিখতে হবে না।</p>
-   <p style="font-size:16px;line-height:1.8"><b>উপরে মাস বদলান:</b> স্ক্রিনের উপরের মাস-বক্স থেকে যে মাসের হিসাব দেখতে চান সেই মাস বেছে নিন।</p>
-   <p style="font-size:16px;line-height:1.8"><b>সেভ:</b> যা লিখবেন নিজে নিজে এই ফোন/কম্পিউটারে সেভ হয়। GitHub-এ পাঠাতে <b>Settings &amp; data</b> ট্যাবে “Push to GitHub” চাপুন।</p></div>
-  <div class="card"><h2>🗓️ প্রতি মাসের কাজ (এই ক্রমে করুন)</h2><ol style="font-size:16px;line-height:2;padding-left:22px">
-   <li>মূল ড্যাশবোর্ডে সব বিক্রি, ক্রয় ও খরচ ঠিকমতো লিখুন।</li>
-   <li>এই অ্যাপ খুলুন — ডেটা নিজে নিজে আসবে (না এলে <b>Tax &amp; dashboard link</b> ট্যাবে “Import from dashboard now” চাপুন)।</li>
-   <li><b>Stock movements</b>: গুদামে গুনে আসল সংখ্যা লিখুন।</li>
-   <li><b>Costs</b>: ভাড়া, বেতন ইত্যাদি লিখুন (ড্যাশবোর্ড থেকে না এলে)।</li>
-   <li><b>NRV review</b>: যে মাল সস্তায় বেচতে হবে সেগুলো দেখুন।</li>
-   <li><b>Partner review</b>: মাস শেষের সই ও মিটিং নোট লিখুন।</li>
-   <li><b>Dashboard</b>: লাভ-ক্ষতি দেখুন। শেষে Settings থেকে “Push to GitHub” চাপুন।</li></ol></div>
-  ${sec('📊','ড্যাশবোর্ড','Dashboard','এক নজরে পুরো ছবি: গুদামে মালের দাম, কত লাভ, কোন মাল পুরোনো।',
-   ['<b>Closing inventory</b> = মাস শেষে গুদামের সব মালের দাম।','<b>Profit</b> = বিক্রি থেকে খরচ বাদ দিয়ে লাভ। লাল সংখ্যা মানে ক্ষতি।','<b>Ageing mix</b> = মাল কতদিন ধরে পড়ে আছে। বেশি দিনের মাল মানে টাকা আটকে আছে।','<b>Control checks</b> = ভুল ধরার বাতি। “All passed” মানে সব ঠিক। লাল দেখালে সেটা ঠিক করুন।','<b>Month-close checklist</b> = মাস শেষের কাজের তালিকা। কাজ শেষ হলে টিক দিন।'],'এখানে কিছু লিখতে হয় না, শুধু দেখার জায়গা (শুধু checklist-এ টিক দেবেন)।')}
-  ${sec('📦','স্টক মুভমেন্ট','Stock movements','প্রতি মাসে প্রতিটি ব্যাচের মাল কতটা বিক্রি হলো, কতটা ফেরত এলো, গুদামে আসলে কতটা আছে।',
-   ['উপরে মাস ঠিক আছে কিনা দেখুন।','প্রতিটি লাইনে <b>Sales</b> (বিক্রি) লিখুন — ড্যাশবোর্ড থেকে এলে আগে থেকেই বসানো থাকবে।','<b>Returns in</b> = ক্রেতা ফেরত দিয়েছে। <b>Returns out</b> = সরবরাহকারীকে ফেরত দিয়েছি। <b>Other outflows</b> = নষ্ট বা হারিয়ে গেছে।','<b>Physical count</b> = আপনি নিজে গুনে যা পেলেন সেই সংখ্যা। এটা অবশ্যই লিখবেন।','কোনো ব্যাচে এই মাসে কিছুই হয়নি? নিচের বোতাম <b>Confirm zero activity</b> চাপুন।'],'Revenue (টাকা) ঘর খালি রাখলে অ্যাপ নিজে দাম × সংখ্যা করে নেবে।')}
-  ${sec('💸','খরচ','Costs','গুদামের মাসিক খরচ — ভাড়া, বেতন, বিদ্যুৎ ইত্যাদি। এগুলো মালের উপর ভাগ করে দেখা হয়।',
-   ['<b>১. Actual cost pools</b>: প্রতিটি খরচের পাশে ওই মাসে আসলে কত টাকা গেছে লিখুন (P01 ভাড়া, P02 বেতন, P03 বিদ্যুৎ, P04 হ্যান্ডলিং, P05 বীমা, P06 মেরামত, P09 বাকি খরচ)।','গত মাসের মতো হলে <b>Copy last month\'s amounts</b> বোতাম চাপুন।','<b>২. Cost drivers</b>: কোন ব্যাচ কতটা জায়গা নিয়েছে, কত ঘণ্টা কাজ লেগেছে — সেই সংখ্যা লিখুন। না জানলে ফাঁকা রাখুন।'],'ড্যাশবোর্ড থেকে খরচ অটো আসে। তাই আসা সংখ্যা বদলাবেন না; শুধু নতুন কিছু থাকলে যোগ করুন।')}
-  ${sec('🏷️','NRV রিভিউ','NRV review','NRV মানে “আজ বিক্রি করলে হাতে কত পাব”। যদি কেনা দামের চেয়ে কম পাই, তাহলে ক্ষতিটা এখনই হিসাবে ধরতে হয়।',
-   ['যে মাল পড়ে আছে তার জন্য <b>Selling price</b> (এখন কত দামে বিক্রি হবে) লিখুন।','<b>Cost to sell</b> = বিক্রি করতে যা খরচ (প্যাকেট, ডেলিভারি)। <b>Evidence</b> = প্রমাণ (কোথায় এই দাম দেখলেন)।','অ্যাপ নিজে বলে দেবে কত ক্ষতি ধরতে হবে (Write-down)।','ক্ষতি বেশি হলে <b>Approval</b> ঘরে অংশীদারেরা “Approved” বেছে নেবেন।'],'সব মালের জন্য লাগে না। যেগুলোর দাম কমে গেছে শুধু সেগুলো করুন।')}
-  ${sec('🧾','পণ্য ও ব্যাচ','Products & lots','এখানে পণ্যের তালিকা আর প্রতিবার কেনা মালের ব্যাচ রাখা হয়।',
-   ['<b>Add a product</b>: কোড (যেমন A1), নাম, <b>Marked price</b> (গায়ে লেখা দাম) ও <b>Selling price</b> (আসল বিক্রির দাম) লিখে Add চাপুন।','<b>Receive stock</b>: নতুন মাল এলে ব্যাচের নাম, তারিখ, পণ্য, সংখ্যা, একটার দাম, আর আনার খরচ (গাড়িভাড়া ইত্যাদি) লিখুন।','নিচের তালিকায় <b>Profit / unit</b> দেখলে বুঝবেন একটা বেচলে কত লাভ।'],'ড্যাশবোর্ডের কেনা মাল নিজে নিজে ব্যাচ হয়ে যায় (নাম DB-… বা OPEN-…)। সেগুলো হাতে বদলাবেন না — আসল জায়গা ড্যাশবোর্ড।')}
-  ${sec('🛒','ক্রয় নিয়ন্ত্রণ','Purchasing','আবার মাল কেনার আগে দেখে নেওয়া — সত্যিই কেনা দরকার কিনা।',
-   ['<b>Request a repeat purchase</b>: কোন পণ্য, কত সংখ্যা, কত দামে কিনতে চান লিখুন।','অ্যাপ দেখাবে: গুদামে এখনই কতদিনের মাল আছে, পুরোনো মাল পড়ে আছে কিনা।','লাল সতর্কতা এলে (বেশি মাল, বা পুরোনো মাল জমে আছে) কেনার আগে অংশীদারদের কাছ থেকে অনুমতি নিন।'],'নিয়ম: যে পণ্যের মাল ১৮১ দিনের বেশি পড়ে আছে, সেটা আবার কেনা বন্ধ।')}
-  ${sec('🤝','পার্টনার রিভিউ','Partner review','মাস শেষে সব অংশীদার একসাথে বসে হিসাব মিলানোর জায়গা।',
-   ['<b>Month-end stock count &amp; sign-off</b>: কে গুনলো, কবে গুনলো, কে সই করলো — লিখুন।','<b>Meeting minutes</b> ঘরে মিটিংয়ে কী ঠিক হলো সংক্ষেপে লিখুন।','<b>Decisions required</b>: বড় সিদ্ধান্ত (যেমন কোন হিসাবের নিয়ম) অংশীদাররা মিলে লিখবেন।'],'')}
-  ${sec('✅','কাজের তালিকা','Actions','কোন মাল নিয়ে কী করতে হবে তার তালিকা — কে করবে, কবে নাগাদ।',
-   ['<b>Log an action</b>: কোন মাল/ব্যাচ, কী সমস্যা, কী করবেন (ছাড়ে বিক্রি, সরবরাহকারীকে ফেরত, কম্বো অফার)।','কে করবে (Owner) আর শেষ তারিখ (Due) লিখুন।','কাজ শেষ হলে তালিকায় অবস্থা বদলে “Done” করুন।'],'শেষ তারিখ পার হলে ড্যাশবোর্ডে লাল সংখ্যা দেখাবে।')}
-  ${sec('🏛️','ট্যাক্স ও ড্যাশবোর্ড লিংক','Tax & dashboard link','এখানে মূল ড্যাশবোর্ডের সাথে সংযোগ, আর আপনাদের দেওয়া ট্যাক্সের হিসাব।',
-   ['<b>Import from dashboard now</b>: ড্যাশবোর্ডের নতুন বিক্রি, ক্রয় ও খরচ নিয়ে আসে। সাধারণত নিজেই আসে; না এলে বোতাম চাপুন।','<b>Tax paid</b>: ট্যাক্স দেওয়ার পর <b>+ Add tax row</b> চাপুন। মাস, ধরন (Income tax / Turnover tax / VAT / Advance tax) আর টাকা লিখুন।','<b>Profit after tax</b>: অ্যাপ নিজে ট্যাক্স বাদ দিয়ে লাভ দেখাবে।','<b>Check against the main dashboard</b>: দুই জায়গার বিক্রি মিলছে কিনা দেখুন। বিক্রি এক হওয়া উচিত।'],'ট্যাক্সের টাকা অ্যাপ হিসাব করে না। হিসাবরক্ষক বা NBR যা বলে সেই সংখ্যা আপনারা লিখবেন।')}
-  ${sec('🗂️','ডেটা টেবিল','Data tables (CSV)','সব তথ্য এখানে টেবিল আকারে। Excel-এর মতো সরাসরি বদলানো যায়।',
-   ['উপরের <b>Table</b> বক্স থেকে যে টেবিল দেখতে চান বেছে নিন।','<b>+ Add row</b> নতুন লাইন যোগ করে। লাইনের পাশে <b>Delete</b> মুছে দেয়।','<b>Export this CSV</b> টেবিলটা কম্পিউটারে নামায়।'],'এটা শুধু অভিজ্ঞদের জন্য। সাধারণ কাজ অন্য ট্যাবেই হয়ে যায়।')}
-  ${sec('⚙️','সেটিংস ও ডেটা','Settings & data','অ্যাপের নিয়ম ও সেভ করার জায়গা।',
-   ['<b>Policy settings</b>: কতদিন পড়ে থাকলে মাল “অচল” — এসব সংখ্যা অংশীদাররা মিলে ঠিক করবেন। না বুঝলে বদলাবেন না।','<b>GitHub sync</b>: Token বসালে Push to GitHub চাপলে সব তথ্য নিরাপদে জমা হয়। অন্য ফোনে নিতে <b>Pull from GitHub</b> চাপুন।','<b>Export backup</b>: নিজের কাছে একটা কপি রাখে।','<b>Erase everything</b> কখনো চাপবেন না — সব মুছে যায়।'],'প্রতি মাস শেষে একবার Push to GitHub চাপতে ভুলবেন না।')}
-  <div class="card"><h2>🆘 কিছু ভুল হলে</h2><ul style="font-size:16px;line-height:1.9;padding-left:22px">
-   <li>সংখ্যা মিলছে না → <b>Dashboard</b> ট্যাবের <b>Control checks</b> দেখুন; কোন লাইনে সমস্যা লেখা আছে।</li>
-   <li>ড্যাশবোর্ডের তথ্য আসেনি → মূল ড্যাশবোর্ড একবার খুলে আবার এই অ্যাপ খুলুন, তারপর Import চাপুন।</li>
-   <li>ভুল সংখ্যা লিখে ফেলেছেন → ঘরে গিয়ে আবার ঠিক সংখ্যা লিখুন; হিসাব নিজে বদলে যাবে।</li>
-   <li>তবুও বুঝতে না পারলে → কিছু মুছবেন না; অন্য অংশীদারকে জিজ্ঞেস করুন।</li></ul></div>`;
-}
 function vSet(){
   const st=S.settings;
   let h=`<div class="card"><h2>Policy settings <span class="note">(partners decide)</span></h2><div class="frm">
@@ -713,7 +669,7 @@ function vSet(){
 function render(){
   $('#nav').innerHTML=TABS.map(t=>`<button data-tab="${t[0]}" class="${tab===t[0]?'on':''}">${t[1]}</button>`).join('');
   $('#mSel').value=S.settings.month;
-  const v={dashboard:vDashboard,move:vMove,cost:vCost,nrv:vNrv,setup:vSetup,buy:vBuy,review:vReview,act:vAct,guide:vGuide,tax:vTax,data:vData,set:vSet}[tab]();
+  const v={dashboard:vDashboard,move:vMove,cost:vCost,nrv:vNrv,setup:vSetup,buy:vBuy,review:vReview,act:vAct,tax:vTax,data:vData,set:vSet}[tab]();
   $('#app').innerHTML=v;setSync();writeSummary();
 }
 function softRender(){setTimeout(()=>{const a=document.activeElement,id=a&&a.dataset&&a.dataset.id;render();if(id){const el=document.querySelector(`[data-id="${CSS.escape(id)}"]`);if(el){el.focus();if(el.select&&el.type!=='date'&&el.type!=='password')try{el.select();}catch(e){}}}},120);}
