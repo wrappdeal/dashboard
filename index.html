@@ -123,26 +123,46 @@ table.sum td{border-top:1px solid var(--line);padding:8px 4px}table.sum tr.tot t
 .stc{font-size:9px;letter-spacing:1px}.stp{font-size:11px;font-weight:700}
 td .bars{width:130px;height:28px;display:block}
 @media print{body>*:not(#printarea){display:none!important}#printarea{display:block!important}.stk{border:0}.nop{display:none!important}.doc-tb th{-webkit-print-color-adjust:exact;print-color-adjust:exact}@page{margin:8mm}}
+#tnav{display:none}
+#mnav{display:none}
 @media(max-width:1100px){.g4{grid-template-columns:1fr 1fr}}
-@media(max-width:900px){
+/* tablet: one sidebar with every menu group */
+@media(max-width:999px){
+  .rail{display:none}.app{padding:10px}
+  aside{width:208px;top:10px;max-height:calc(100vh - 20px);padding:12px 8px}
+  #nav,.nsearch{display:none}#tnav{display:block}
+  #tnav button{display:flex;gap:10px;align-items:center;width:100%;text-align:left;background:none;border:0;color:var(--ink2);padding:10px;border-radius:12px;font:inherit;font-size:14px;cursor:pointer;margin-bottom:2px;font-weight:500}
+  #tnav button:hover{background:var(--teal-l);color:var(--teal-d)}
+  #tnav button.on{background:var(--ink);color:#fff;font-weight:600}#tnav button.on svg{color:var(--yellow)}
+  .bizchip{display:none}
+  main{padding:18px}
+  .g3{grid-template-columns:1fr}.g2{grid-template-columns:1fr}.salegrid{grid-template-columns:1fr}.line-item{grid-template-columns:1fr 1fr}
+  .kpi b{font-size:19px}
+}
+/* phone: dropdown menu */
+@media(max-width:599px){
   .app{flex-direction:column;align-items:stretch;padding:10px;gap:10px}
-  .rail,aside{display:none}.body{display:block}.rest{width:100%}
-  #mnav{display:flex;overflow-x:auto;gap:2px;background:#fff;border-radius:16px;padding:6px;position:sticky;top:0;z-index:20;scroll-snap-type:x proximity;-webkit-overflow-scrolling:touch;scroll-behavior:smooth;scrollbar-width:none;box-shadow:0 2px 10px rgba(16,32,30,.08)}
-  #mnav::-webkit-scrollbar{display:none}
-  #mnav button{display:flex;gap:8px;align-items:center;white-space:nowrap;background:none;border:0;color:var(--ink2);padding:9px 12px;border-radius:12px;font:inherit;font-size:14px;cursor:pointer;flex:0 0 auto;scroll-snap-align:center;font-weight:500}
-  #mnav button.on{background:var(--ink);color:#fff;font-weight:600}#mnav button.on svg{color:var(--yellow)}
+  aside{display:none}.body{display:block}.rest{width:100%}
+  #mnav{display:block;position:sticky;top:0;z-index:60}
+  #mbtn{display:flex;align-items:center;gap:10px;width:100%;background:#fff;border:1px solid var(--line);border-radius:14px;padding:12px 14px;font:inherit;font-size:15px;font-weight:600;color:var(--ink);cursor:pointer;box-shadow:0 2px 10px rgba(16,32,30,.08)}
+  #mbtn .ml{flex:1;text-align:left}#mbtn svg:first-child{color:var(--teal)}#mbtn .chev{transition:transform .2s}#mnav.open #mbtn .chev{transform:rotate(180deg)}
+  #mpanel{display:none;position:absolute;left:0;right:0;top:calc(100% + 6px);background:#fff;border-radius:16px;padding:8px;max-height:70vh;overflow:auto;box-shadow:0 14px 40px rgba(16,32,30,.22);border:1px solid var(--line)}
+  #mnav.open #mpanel{display:block}
+  #mpanel .ng{padding:10px 10px 4px}
+  #mpanel button{display:flex;gap:12px;align-items:center;width:100%;text-align:left;background:none;border:0;color:var(--ink2);padding:12px 10px;border-radius:12px;font:inherit;font-size:15px;cursor:pointer;font-weight:500}
+  #mpanel button.on{background:var(--ink);color:#fff;font-weight:600}#mpanel button.on svg{color:var(--yellow)}
+  .topbar{padding:2px 2px 10px;gap:8px}.topbar h1{font-size:18px}
   main{padding:16px;border-radius:16px;min-height:0}
-  .topbar{padding:2px 2px 10px;gap:8px}.topbar h1{font-size:18px}.bizchip{display:none}
-  .g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr}.g2{grid-template-columns:1fr}.kpi b{font-size:17px}.kpi .kic{width:28px;height:28px;border-radius:9px;right:10px;top:10px}.kpi .kic svg{width:15px;height:15px}.kpi small{padding-right:34px;font-size:12px}.kpi{padding:14px 12px 14px 14px}
-  .line-item{grid-template-columns:1fr 1fr}
-  .salegrid{grid-template-columns:1fr}
+  .kpi b{font-size:17px}.kpi .kic{width:28px;height:28px;border-radius:9px;right:10px;top:10px}.kpi .kic svg{width:15px;height:15px}.kpi small{padding-right:34px;font-size:12px}.kpi{padding:14px 12px 14px 14px}
+}
+@media(max-width:900px){
   .doc-h{flex-direction:column}.doc-t{text-align:left}.qline{grid-template-columns:1fr 1fr}.qline .qn{grid-column:1/-1}.modal .box{padding:14px}
 }
 </style>
 </head>
 <body>
 <div class="app">
-  <nav id="mnav"></nav>
+  <div id="mnav"></div>
   <div class="rail" id="rail"></div>
   <div class="rest">
     <div class="topbar">
@@ -157,6 +177,7 @@ td .bars{width:130px;height:28px;display:block}
       <aside>
         <div class="nsearch"><span id="nsico"></span><input id="nsearch" placeholder="মেন্যু খুঁজুন" oninput="navQ=this.value;renderNav()"></div>
         <nav id="nav"></nav>
+        <nav id="tnav"></nav>
       </aside>
       <main id="main"></main>
     </div>
@@ -399,6 +420,7 @@ alert:'<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.7
 truck:'<rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
 up:'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',
 search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+chev:'<polyline points="6 9 12 15 18 9"/>',
 dn:'<line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/>'};
 const ic=(n,sz=20)=>`<svg width="${sz}" height="${sz}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]||""}</svg>`;
 /* ============ UI shell ============ */
@@ -406,6 +428,9 @@ const PAGES=[["dashboard","dash","ড্যাশবোর্ড"],["sale","cart
 const GROUPS=[["home","dash","হোম",["dashboard"]],["sales","cart","বিক্রয়",["sale","quotes","orders"]],["inv","pkg","ইনভেন্টরি",["products","stock","purchases","barcode"]],["acc","wallet","হিসাব",["mfs","expenses","ledger","reports"]],["set","sliders","সেটিংস",["settings"]]];
 const QUICK=[["নতুন বিক্রয়","cart","go('sale')"],["নতুন কোটেশন","file","go('quotes');quoteForm()"],["MFS ক্রয়","phone","go('mfs');mfsForm('buy')"],["নতুন খরচ","down","go('expenses');expenseForm()"]];
 let navQ="";
+function toggleMenu(e){ if(e) e.stopPropagation(); $("#mnav").classList.toggle("open"); }
+function closeMenu(){ $("#mnav").classList.remove("open"); }
+document.addEventListener("click",e=>{ const m=$("#mnav"); if(m&&!m.contains(e.target)) closeMenu(); });
 const groupOf=p=>GROUPS.find(g=>g[3].includes(p))||GROUPS[0];
 function renderNav(){
   const g=groupOf(page), q=navQ.trim().toLowerCase();
@@ -416,7 +441,11 @@ function renderNav(){
     if(g[0]==="home") h+=`<div class="ng">দ্রুত কাজ</div>`+QUICK.map(([t,i,f])=>`<button class="q" onclick="${f}">${ic(i)}<span>${t}</span></button>`).join(""); }
   $("#nav").innerHTML=h; $("#nsico").innerHTML=ic("search",16);
   $("#rail").innerHTML=`<img src="${LOGO_MARK}" alt="WrappDeal">`+GROUPS.map(x=>x[0]==="set"?`<span class="rsp"></span>`+`<button class="${x===g?"on":""}" title="${x[2]}" onclick="go('${x[3][0]}')">${ic(x[1],22)}</button>`:`<button class="${x===g?"on":""}" title="${x[2]}" onclick="go('${x[3][0]}')">${ic(x[1],22)}</button>`).join("");
-  $("#mnav").innerHTML=PAGES.map(p=>`<button class="${p[0]===page?"on":""}" onclick="go('${p[0]}')">${ic(p[1],18)}<span>${p[2]}</span></button>`).join("");
+  const all=GROUPS.map(x=>`<div class="ng">${x[2]}</div>`+x[3].map(k=>{ const p=PAGES.find(y=>y[0]===k); return `<button class="${k===page?"on":""}" onclick="go('${k}')">${ic(p[1],18)}<span>${p[2]}</span></button>`; }).join("")).join("");
+  $("#tnav").innerHTML=all;
+  const cur=PAGES.find(p=>p[0]===page)||PAGES[0], open=$("#mnav").classList.contains("open");
+  $("#mnav").innerHTML=`<button id="mbtn" onclick="toggleMenu(event)">${ic(cur[1],20)}<span class="ml">${cur[2]}</span>${ic("chev",18).replace('<svg','<svg class="chev"')}</button><div id="mpanel">${all.replace(/onclick="go\('/g,"onclick=\"closeMenu();go('")}</div>`;
+  if(open) $("#mnav").classList.add("open");
   $("#gtitle").textContent=(PAGES.find(p=>p[0]===page)||PAGES[0])[2];
 }
 let page=location.hash.slice(1)||"dashboard", filt={q:"",status:"",pay:"",range:30,pq:"",sq:"",lowOnly:false,mp:"",mt:"",la:""};
@@ -426,7 +455,7 @@ function render(){
   migrate();
   renderNav();
   const fn={dashboard:vDash,sale:vSale,quotes:vQuotes,orders:vOrders,mfs:vMfs,products:vProducts,purchases:vPurchases,stock:vStock,expenses:vExpenses,ledger:vLedger,reports:vReports,barcode:vBarcode,settings:vSettings}[page]||vDash;
-  $("#main").innerHTML=fn(); (fn.after||(()=>{}))(); setStatus(); const on=$("#mnav button.on"); if(on&&on.scrollIntoView) on.scrollIntoView({inline:"center",block:"nearest"});
+  $("#main").innerHTML=fn(); (fn.after||(()=>{}))(); setStatus();
 }
 function openModal(html){ closeModal(); const m=document.createElement("div"); m.className="modal"; m.id="modal"; m.innerHTML=`<div class="box">${html}</div>`; m.addEventListener("mousedown",e=>{ if(e.target===m) closeModal(); }); document.body.appendChild(m); }
 function closeModal(){ const m=$("#modal"); if(m) m.remove(); }
